@@ -114,6 +114,97 @@ app.post('/download', (req, res) => {
     });
 });
 
+// SSE Download endpoint (streams yt-dlp output with progress)
+app.get('/download-stream', (req, res) => {
+    const { url, prefix } = req.query;
+    
+    // Validate inputs
+    if (!url || typeof url !== 'string') {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'URL is required' })}\n\n`);
+        res.end();
+        return;
+    }
+    
+    if (!isValidUrl(url)) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'Invalid URL format' })}\n\n`);
+        res.end();
+        return;
+    }
+    
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    
+    // Sanitize prefix
+    const sanitizedPrefix = sanitizePrefix(prefix);
+    
+    // Get the full path to Downloads folder
+    const downloadsPath = path.join(os.homedir(), 'Downloads');
+    
+    // Build output filename with conditional prefix
+    const outputTemplate = sanitizedPrefix ? 
+        `${downloadsPath}/${sanitizedPrefix}-%(title)s.%(ext)s` : 
+        `${downloadsPath}/%(title)s.%(ext)s`;
+    
+    // Build yt-dlp command arguments
+    const args = [
+        url,
+        '-f', 'best[height<=1080]/best',
+        '--impersonate', 'chrome:macos-14',
+        '-o', outputTemplate
+    ];
+
+    console.log(`Executing: yt-dlp ${args.join(' ')}`);
+    
+    // Use spawn to run yt-dlp
+    const ytdlp = spawn('yt-dlp', args);
+    
+    // Stream stdout to client
+    ytdlp.stdout.on('data', (data) => {
+        const text = data.toString();
+        const lines = text.replace(/\r/g, '\n').split('\n');
+        lines.forEach(line => {
+            if (line.trim()) {
+                res.write(`data: ${JSON.stringify({ type: 'output', line: line })}\n\n`);
+            }
+        });
+    });
+    
+    // Stream stderr to client (yt-dlp outputs progress here)
+    ytdlp.stderr.on('data', (data) => {
+        const text = data.toString();
+        const lines = text.replace(/\r/g, '\n').split('\n');
+        lines.forEach(line => {
+            if (line.trim()) {
+                res.write(`data: ${JSON.stringify({ type: 'output', line: line })}\n\n`);
+            }
+        });
+    });
+    
+    // Handle process completion
+    ytdlp.on('close', (code) => {
+        if (code !== 0) {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: `Process exited with code ${code}` })}\n\n`);
+        } else {
+            res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+        }
+        res.end();
+    });
+    
+    // Handle process errors
+    ytdlp.on('error', (error) => {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+        res.end();
+    });
+    
+    // Handle client disconnect
+    req.on('close', () => {
+        ytdlp.kill();
+        res.end();
+    });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
