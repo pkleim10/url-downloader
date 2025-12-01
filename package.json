@@ -1,11 +1,13 @@
 {
   "name": "url-downloader",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Local HTML interface for downloading URLs with yt-dlp",
-  "main": "server.js",
+  "main": "url-download-server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node url-download-server.js",
+    "dev": "node url-download-server.js",
+    "dev:turbo": "node --watch url-download-server.js",
+    "kill": "pkill -f 'node url-download-server.js'"
   },
   "keywords": [
     "yt-dlp",

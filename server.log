@@ -1,0 +1,3 @@
+URL Downloader server running at http://127.0.0.1:3000
+Open your browser and navigate to the URL above
+Make sure yt-dlp is installed: brew install yt-dlp
