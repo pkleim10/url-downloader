@@ -873,7 +873,8 @@
                         <span class="toggle-slider"></span>
                         <span class="toggle-label">Hide paused</span>
                     </label>
-                    <button id="unpauseAllBtn" class="queue-action-btn" title="Resume all paused items">Resume All</button>
+                    <button id="pauseAllBtn" class="queue-action-btn" title="Pause active downloads and all pending items">Pause</button>
+                    <button id="unpauseAllBtn" class="queue-action-btn" title="Resume all paused items">Resume</button>
                     <button id="clearQueueBtn" class="queue-action-btn" title="Clear current queue">Clear</button>
                     <span id="queueCount" class="queue-count">0</span>
                 </div>
@@ -1578,6 +1579,28 @@
             }
         }
         
+        // Stop active downloads (partial files are kept) and hold everything pending
+        function pauseAll() {
+            const toPause = downloadQueue.filter(item => item.status === 'processing' || item.status === 'pending');
+            
+            if (toPause.length === 0) {
+                showStatus('Nothing to pause', 'error');
+                return;
+            }
+            
+            toPause.forEach(item => {
+                stopDownload(item);
+                item.status = 'paused';
+                item.progress = 0;
+                item.timeRemaining = null;
+            });
+            
+            updateQueueDisplay();
+            saveQueue();
+            
+            showStatus(`Paused ${toPause.length} item(s)`, 'success');
+        }
+        
         // Unpause all paused items
         function unpauseAll() {
             const pausedItems = downloadQueue.filter(item => item.status === 'paused');
@@ -1641,6 +1664,7 @@
         
         // Event listeners for queue buttons
         document.getElementById('clearQueueBtn').addEventListener('click', clearQueue);
+        document.getElementById('pauseAllBtn').addEventListener('click', pauseAll);
         document.getElementById('unpauseAllBtn').addEventListener('click', unpauseAll);
         
         // Event listener for hide paused toggle
@@ -1690,8 +1714,10 @@
             try {
                 const queueItem = addToQueue(url, prefix, destination);
                 
-                // Clear only URL field, keep prefix for reuse
-                document.getElementById('url').value = '';
+                // Clear only URL field, keep prefix for reuse, and ready it for the next link
+                const urlInput = document.getElementById('url');
+                urlInput.value = '';
+                urlInput.focus();
                 
             } catch (error) {
                 statusDiv.className = 'status error';
