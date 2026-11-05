@@ -1,0 +1,16 @@
+---
+description: How to test a URL and record its site configuration
+alwaysApply: true
+---
+
+# Site configurations
+
+Every site the user hands over gets an entry in `sites/sites.json`, shown read-only in the app's **Sites** panel. The server matches a queued URL's host against `match` (domain or subdomain) and passes `ytDlpArgs` to yt-dlp; `sites/plugins` is always passed with `--plugin-dirs`.
+
+When given a URL, establish success yourself:
+
+1. Probe without downloading: `curl -I`, then `yt-dlp --simulate` (full network permission).
+2. Prove it with real media: download the file or a sample into a scratch folder under `/tmp` (never `~/Downloads`), check it with `ffprobe` and a full `ffmpeg -f null` decode, then delete it.
+3. If it fails, fix in this order: update yt-dlp, per-site options (`ytDlpArgs`), the user's browser cookies (ask first), then a plugin in `sites/plugins/yt_dlp_plugins/extractor/`.
+4. Record the entry: `method` (`builtin` | `options` | `plugin` | `unsupported`), `status` (`working` | `broken` | `unsupported` | `untested`), `lastTested`, `testResult` (what the check showed), `notes` (why it failed and why the fix works), `exampleUrl`.
+5. Do not circumvent DRM; mark such sites `unsupported` and say why.

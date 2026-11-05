@@ -467,6 +467,103 @@
             overflow-y: auto;
         }
         
+        .sites-modal-content {
+            max-width: 760px;
+        }
+
+        .sites-modal-content .modal-body {
+            max-height: 70vh;
+        }
+
+        .site-entry {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .site-entry summary {
+            padding: 12px 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            list-style: none;
+        }
+
+        .site-entry summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .site-entry summary::before {
+            content: '▸';
+            color: #999;
+            transition: transform 0.15s;
+        }
+
+        .site-entry[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        .site-name {
+            font-weight: 600;
+            color: #333;
+            flex: 1;
+        }
+
+        .site-meta {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .site-status {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .site-status-working { background-color: #d4edda; color: #155724; }
+        .site-status-broken { background-color: #f8d7da; color: #721c24; }
+        .site-status-unsupported { background-color: #e2e3e5; color: #383d41; }
+        .site-status-untested { background-color: #fff3cd; color: #856404; }
+
+        .site-details {
+            padding: 0 14px 14px 34px;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .site-details dt {
+            font-weight: 600;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        .site-details dd {
+            margin: 2px 0 0;
+            word-break: break-word;
+        }
+
+        .site-details code,
+        .site-details pre {
+            font-family: Menlo, Monaco, monospace;
+            font-size: 12px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+        }
+
+        .site-details code {
+            padding: 1px 4px;
+        }
+
+        .site-details pre {
+            padding: 10px;
+            overflow-x: auto;
+            white-space: pre;
+            margin: 4px 0 0;
+        }
+
         .error-url {
             color: #666;
             font-size: 14px;
@@ -876,6 +973,7 @@
                     <button id="pauseAllBtn" class="queue-action-btn" title="Pause active downloads and all pending items">Pause</button>
                     <button id="unpauseAllBtn" class="queue-action-btn" title="Resume all paused items">Resume</button>
                     <button id="clearQueueBtn" class="queue-action-btn" title="Clear current queue">Clear</button>
+                    <button id="sitesBtn" class="queue-action-btn" title="View per-site download configurations">Sites</button>
                     <span id="queueCount" class="queue-count">0</span>
                 </div>
             </div>
@@ -896,6 +994,17 @@
                 <div class="error-url" id="errorUrl"></div>
                 <div class="error-message" id="errorMessage"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Sites Modal -->
+    <div id="sitesModal" class="modal">
+        <div class="modal-content sites-modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Site Configurations</h2>
+                <button class="modal-close" id="sitesModalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="sitesList"></div>
         </div>
     </div>
 
@@ -1253,7 +1362,10 @@
                 try {
                     const data = JSON.parse(event.data);
                     
-                    if (data.type === 'output') {
+                    if (data.type === 'site') {
+                        item.siteName = data.name;
+                        updateQueueDisplay();
+                    } else if (data.type === 'output') {
                         // Parse progress from the line
                         const progressMatch = data.line.match(/\[download\]\s+(\d+\.?\d*)%/);
                         if (progressMatch) {
@@ -1357,6 +1469,7 @@
                             <div class="queue-item-url">${item.url}</div>
                             ${item.prefix ? `<div class="queue-item-prefix">Prefix: ${item.prefix}</div>` : ''}
                             ${item.destination ? `<div class="queue-item-prefix">Destination: ${item.destination}</div>` : ''}
+                            ${item.siteName ? `<div class="queue-item-prefix">Site: ${escapeHtml(item.siteName)}</div>` : ''}
                             ${item.status === 'failed' && item.failReason ? `<div class="queue-item-error" title="${escapeHtml(item.failReason)}">${escapeHtml(item.failReason)}</div>` : ''}
                             ${item.status === 'processing' ? `
                                 <div class="progress-bar-container">
@@ -1664,6 +1777,74 @@
         
         // Event listeners for queue buttons
         document.getElementById('clearQueueBtn').addEventListener('click', clearQueue);
+        const SITE_METHOD_LABELS = {
+            builtin: 'Built into yt-dlp',
+            options: 'yt-dlp with extra options',
+            plugin: 'Custom yt-dlp plugin',
+            unsupported: 'Not feasible'
+        };
+        
+        function renderSite(site) {
+            const field = (label, value) => value ? `<dt>${label}</dt><dd>${value}</dd>` : '';
+            const args = (site.ytDlpArgs || []).length
+                ? `<code>${escapeHtml(site.ytDlpArgs.join(' '))}</code>`
+                : 'None';
+            const plugin = site.plugin
+                ? `<code>${escapeHtml(site.plugin)}</code>${site.pluginSource ? `<pre>${escapeHtml(site.pluginSource)}</pre>` : ' (file not found)'}`
+                : '';
+            const status = site.status || 'untested';
+            return `
+                <details class="site-entry">
+                    <summary>
+                        <span class="site-name">${escapeHtml(site.name || site.id)}</span>
+                        <span class="site-meta">${escapeHtml(SITE_METHOD_LABELS[site.method] || site.method || '')}</span>
+                        <span class="site-status site-status-${escapeHtml(status)}">${escapeHtml(status)}</span>
+                    </summary>
+                    <dl class="site-details">
+                        ${field('Matches', (site.match || []).map(m => `<code>${escapeHtml(m)}</code>`).join(' '))}
+                        ${field('Extra yt-dlp options', args)}
+                        ${field('Plugin', plugin)}
+                        ${field('Last tested', site.lastTested ? escapeHtml(site.lastTested) : 'Never')}
+                        ${field('Test result', site.testResult ? escapeHtml(site.testResult) : '')}
+                        ${field('Notes', site.notes ? escapeHtml(site.notes) : '')}
+                        ${field('Example URL', site.exampleUrl ? `<code>${escapeHtml(site.exampleUrl)}</code>` : '')}
+                    </dl>
+                </details>`;
+        }
+        
+        async function openSites() {
+            const modal = document.getElementById('sitesModal');
+            const list = document.getElementById('sitesList');
+            list.innerHTML = '<div class="queue-empty">Loading…</div>';
+            modal.style.display = 'block';
+            try {
+                const response = await fetch('/api/sites');
+                const { sites } = await response.json();
+                list.innerHTML = sites.length
+                    ? sites.map(renderSite).join('')
+                    : '<div class="queue-empty">No site configurations yet. URLs from any site still go through yt-dlp as usual.</div>';
+            } catch (error) {
+                list.innerHTML = `<div class="queue-empty">Could not load site configurations: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+        
+        function closeSites() {
+            document.getElementById('sitesModal').style.display = 'none';
+        }
+        
+        document.getElementById('sitesBtn').addEventListener('click', openSites);
+        document.getElementById('sitesModalClose').addEventListener('click', closeSites);
+        document.getElementById('sitesModal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                closeSites();
+            }
+        });
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeSites();
+            }
+        });
+        
         document.getElementById('pauseAllBtn').addEventListener('click', pauseAll);
         document.getElementById('unpauseAllBtn').addEventListener('click', unpauseAll);
         

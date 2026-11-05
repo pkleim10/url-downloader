@@ -1,0 +1,17 @@
+{
+  "sites": [
+    {
+      "id": "istock-media",
+      "name": "iStock preview videos",
+      "match": ["media.istockphoto.com"],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://media.istockphoto.com/id/497375361/video/super-mother-and-daughter-running-to-the-sun.mp4?s=mp4-640x640-is&k=20&c=7RwPyzlurnRxyriCTKqzFMqgT6XrqIHNScD9C9esT38=",
+      "lastTested": "2026-11-05",
+      "testResult": "Downloaded the full file (5.6 MB): H.264 768x432, 24 fps, 29.8 s. Every frame decoded cleanly.",
+      "notes": "The link points straight at an MP4 file on iStock's media server (200 OK, video/mp4, resumable), so yt-dlp's generic downloader handles it with no extra options. The file name comes from the URL path. These are iStock's watermarked preview copies; the licensed full-resolution clip is not available this way."
+    }
+  ]
+}

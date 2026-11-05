@@ -36,8 +36,35 @@ function isValidUrl(string) {
     }
 }
 
+// Per-site configuration (sites/sites.json), re-read on every use so edits apply immediately
+const SITES_FILE = path.join(__dirname, 'sites', 'sites.json');
+const SITES_PLUGIN_DIR = path.join(__dirname, 'sites', 'plugins');
+
+function loadSites() {
+    try {
+        const data = JSON.parse(fs.readFileSync(SITES_FILE, 'utf8'));
+        return Array.isArray(data.sites) ? data.sites : [];
+    } catch (error) {
+        console.error('Error reading sites.json:', error.message);
+        return [];
+    }
+}
+
+function matchSite(url) {
+    let hostname;
+    try {
+        hostname = new URL(url).hostname.toLowerCase();
+    } catch (_) {
+        return null;
+    }
+    return loadSites().find(site => (site.match || []).some(pattern => {
+        const domain = String(pattern).toLowerCase();
+        return hostname === domain || hostname.endsWith('.' + domain);
+    })) || null;
+}
+
 // Build yt-dlp command arguments
-function buildYtDlpArgs(url, prefix, destination) {
+function buildYtDlpArgs(url, prefix, destination, site) {
     // Sanitize prefix
     const sanitizedPrefix = sanitizePrefix(prefix);
 
@@ -75,7 +102,12 @@ function buildYtDlpArgs(url, prefix, destination) {
         `${destinationPath}/%(title)s.%(ext)s`;
 
     // Build yt-dlp command arguments
+    const siteArgs = site && Array.isArray(site.ytDlpArgs) ? site.ytDlpArgs.map(String) : [];
+    const pluginArgs = fs.existsSync(SITES_PLUGIN_DIR) ? ['--plugin-dirs', SITES_PLUGIN_DIR] : [];
+
     return [
+        ...pluginArgs,
+        ...siteArgs,
         url,
         // '-f', 'best[height<=1080]/best',
         // '--impersonate', 'chrome:macos-14',
@@ -105,7 +137,12 @@ app.get('/download-stream', (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     
-    const args = buildYtDlpArgs(url, prefix, destination);
+    const site = matchSite(url);
+    if (site) {
+        res.write(`data: ${JSON.stringify({ type: 'site', id: site.id, name: site.name })}\n\n`);
+    }
+    
+    const args = buildYtDlpArgs(url, prefix, destination, site);
     console.log(`Executing: yt-dlp ${args.join(' ')}`);
     
     // Use spawn to run yt-dlp
@@ -223,6 +260,25 @@ app.get('/load-queue', (req, res) => {
         console.error('Error in load-queue endpoint:', error);
         res.status(500).json({ success: false, error: 'Internal server error', details: error.message });
     }
+});
+
+// Site configurations for the Sites panel (read-only), with plugin source inlined
+app.get('/api/sites', (req, res) => {
+    const sites = loadSites().map(site => {
+        let pluginSource = null;
+        if (site.plugin) {
+            const pluginPath = path.resolve(SITES_PLUGIN_DIR, String(site.plugin));
+            if (pluginPath.startsWith(SITES_PLUGIN_DIR + path.sep)) {
+                try {
+                    pluginSource = fs.readFileSync(pluginPath, 'utf8');
+                } catch (_) {
+                    pluginSource = null;
+                }
+            }
+        }
+        return { ...site, pluginSource };
+    });
+    res.json({ sites });
 });
 
 // Health check endpoint
