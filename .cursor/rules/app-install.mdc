@@ -1,11 +1,11 @@
 ---
-description: URL Downloader.app lives only in /Applications
+description: Downloader.app lives only in /Applications
 alwaysApply: true
 ---
 
-# URL Downloader.app
+# Downloader.app
 
 - The app is a launcher for the web page; it runs the server from this project folder.
-- Build it only with `bash create-app.sh`. That installs `/Applications/URL Downloader.app` and moves every other copy to the Trash (the old in-repo build, other clones such as `WebstormProjects/dl-url`, anything Spotlight finds with bundle id `com.local.url-downloader`).
+- Build it only with `bash create-app.sh`. That installs `/Applications/Downloader.app` and moves every other copy with bundle id `com.local.url-downloader` to the Trash (old in-repo builds, other clones such as `WebstormProjects/dl-url`, the former `URL Downloader.app`).
 - Never leave a copy anywhere but `/Applications`, and never commit the bundle (it is gitignored).
 - Rerun `create-app.sh` after changing `create-app.sh` itself or moving the project folder. Page and server changes need no rebuild.

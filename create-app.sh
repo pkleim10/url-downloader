@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build URL Downloader.app, install it to /Applications, and move any other
+# Build Downloader.app, install it to /Applications, and move any other
 # copies to the Trash. The app is only a launcher: it runs the server from
 # this project folder, so changes to index.html or the server never need a rebuild.
 set -e
@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-APP_NAME="URL Downloader"
+APP_NAME="Downloader"
 BUNDLE_ID="com.local.url-downloader"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 BUILD_ROOT="$(mktemp -d)"
@@ -28,11 +28,11 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>URL Downloader</string>
+    <string>Downloader</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleName</key>
-    <string>URL Downloader</string>
+    <string>Downloader</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -44,7 +44,7 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleDisplayName</key>
-    <string>URL Downloader</string>
+    <string>Downloader</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.14</string>
 </dict>
@@ -58,15 +58,15 @@ EOF
     printf 'PROJECT_DIR=%q\n' "$SCRIPT_DIR"
     cat << 'EOF'
 
-# URL Downloader app launcher
+# Downloader app launcher
 
 URL="http://127.0.0.1:3000"
-LOG_DIR="$HOME/Library/Logs/URL Downloader"
+LOG_DIR="$HOME/Library/Logs/Downloader"
 LOG_FILE="$LOG_DIR/server.log"
 mkdir -p "$LOG_DIR"
 
 alert() {
-    osascript -e "display dialog \"$1\" with title \"URL Downloader\" buttons {\"OK\"} default button \"OK\"" >/dev/null
+    osascript -e "display dialog \"$1\" with title \"Downloader\" buttons {\"OK\"} default button \"OK\"" >/dev/null
 }
 
 log_tail() {
@@ -78,7 +78,7 @@ is_our_server() {
 }
 
 if [ ! -f "$PROJECT_DIR/url-download-server.js" ]; then
-    alert "Can't find the URL Downloader project folder:\n$PROJECT_DIR\n\nRun create-app.sh again from the project folder."
+    alert "Can't find the Downloader project folder:\n$PROJECT_DIR\n\nRun create-app.sh again from the project folder."
     exit 1
 fi
 cd "$PROJECT_DIR" || exit 1
@@ -108,7 +108,7 @@ if ! command -v yt-dlp &>/dev/null; then
 fi
 
 if [ ! -d "node_modules" ]; then
-    osascript -e 'display notification "Installing dependencies..." with title "URL Downloader"'
+    osascript -e 'display notification "Installing dependencies..." with title "Downloader"'
     NPM_PATH=$(command -v npm 2>/dev/null)
     [ -z "$NPM_PATH" ] && NPM_PATH="$(dirname "$NODE_PATH")/npm"
     if ! "$NPM_PATH" install > "$LOG_DIR/npm-install.log" 2>&1; then
@@ -117,7 +117,7 @@ if [ ! -d "node_modules" ]; then
     fi
 fi
 
-osascript -e 'display notification "Starting server..." with title "URL Downloader"'
+osascript -e 'display notification "Starting server..." with title "Downloader"'
 "$NODE_PATH" url-download-server.js > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
@@ -143,11 +143,15 @@ open "$URL"
 
 wait $SERVER_PID
 EOF
-} > "${MACOS_DIR}/URL Downloader"
+} > "${MACOS_DIR}/Downloader"
 
-chmod +x "${MACOS_DIR}/URL Downloader"
+chmod +x "${MACOS_DIR}/Downloader"
 
 # Install (a running launcher keeps working; macOS holds the old file open)
+if [ -d "$INSTALL_PATH" ] && [ "$(defaults read "$INSTALL_PATH/Contents/Info" CFBundleIdentifier 2>/dev/null)" != "$BUNDLE_ID" ]; then
+    echo "✗ ${INSTALL_PATH} is a different app; not replacing it" >&2
+    exit 1
+fi
 rm -rf "$INSTALL_PATH"
 ditto "$APP_DIR" "$INSTALL_PATH"
 echo "✓ Installed ${INSTALL_PATH} (${VERSION})"
@@ -158,6 +162,8 @@ echo "✓ Runs the server from ${SCRIPT_DIR}"
 trash_copy() {
     local copy="$1"
     [ -d "$copy" ] || return 0
+    # Only ever touch our own bundle; other apps may share the name
+    [ "$(defaults read "$copy/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "$BUNDLE_ID" ] || return 0
     local real
     real="$(cd "$copy" && pwd -P)"
     [ "$real" = "$(cd "$INSTALL_PATH" && pwd -P)" ] && return 0
@@ -169,9 +175,10 @@ trash_copy() {
 }
 
 {
-    echo "${SCRIPT_DIR}/${APP_NAME}.app"
-    for parent in "$HOME/Applications" "$HOME/Desktop" "$HOME/Downloads" /Volumes/*/WebstormProjects/* /Volumes/*/WebStormProjects/*; do
-        echo "${parent}/${APP_NAME}.app"
+    for name in "$APP_NAME" "URL Downloader"; do
+        for parent in "$SCRIPT_DIR" /Applications "$HOME/Applications" "$HOME/Desktop" "$HOME/Downloads" /Volumes/*/WebstormProjects/* /Volumes/*/WebStormProjects/*; do
+            echo "${parent}/${name}.app"
+        done
     done
     mdfind "kMDItemCFBundleIdentifier == '${BUNDLE_ID}'" 2>/dev/null || true
 } | while IFS= read -r copy; do
