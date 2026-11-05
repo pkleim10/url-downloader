@@ -1020,12 +1020,12 @@
     <script>
         // Client-side queue management
         let downloadQueue = [];
-        let isProcessingQueue = false;
         let queueUpdateInterval;
-        let currentEventSource = null;
-        let currentProcessingItem = null;
+        // Browsers allow ~6 connections per host; each download holds one EventSource open
+        const MAX_CONCURRENT_DOWNLOADS = 5;
+        const activeDownloads = new Map(); // item id -> EventSource
         let hidePausedItems = true; // Default to hiding paused items
-        let lastETAUpdateTime = 0; // Track last time ETA was updated (for debouncing)
+        let progressRenderTimer = null;
         
         function addToQueue(url, prefix, destination, skipAutoStart = false) {
             const queueItem = {
@@ -1047,8 +1047,7 @@
             // Auto-save queue when item is added
             saveQueue();
             
-            // Start processing if not already processing and not skipping auto-start
-            if (!skipAutoStart && !isProcessingQueue) {
+            if (!skipAutoStart) {
                 processQueue();
             }
             
@@ -1120,177 +1119,149 @@
             return null;
         }
         
-        async function processQueue() {
-            if (isProcessingQueue || downloadQueue.length === 0) {
+        // Start pending items, in queue order, until all download slots are full
+        function processQueue() {
+            while (activeDownloads.size < MAX_CONCURRENT_DOWNLOADS) {
+                const nextItem = downloadQueue.find(item => item.status === 'pending');
+                if (!nextItem) {
+                    break;
+                }
+                startDownload(nextItem);
+            }
+        }
+        
+        function scheduleProcessQueue(delay = 1000) {
+            if (downloadQueue.some(item => item.status === 'pending')) {
+                setTimeout(processQueue, delay);
+            }
+        }
+        
+        // yt-dlp prints progress many times a second per download; coalesce redraws
+        function scheduleProgressRender() {
+            if (progressRenderTimer) {
                 return;
             }
-            
-            isProcessingQueue = true;
-            const currentItem = downloadQueue.find(item => item.status === 'pending');
-            
-            if (!currentItem) {
-                isProcessingQueue = false;
-                return;
-            }
-            
-            currentItem.status = 'processing';
-            currentItem.progress = 0;
-            currentItem.timeRemaining = null;
-            currentItem.startTime = Date.now();
-            currentProcessingItem = currentItem;
-            lastETAUpdateTime = 0; // Reset debounce timer for new download
-            
-            // Update display immediately
-            updateQueueDisplay();
-            
-            // Force another update after a short delay to ensure status change is visible
-            setTimeout(() => {
+            progressRenderTimer = setTimeout(() => {
+                progressRenderTimer = null;
                 updateQueueDisplay();
-            }, 50);
+            }, 250);
+        }
+        
+        // Close an item's stream and free its slot; returns false if it was not active
+        function stopDownload(item) {
+            const eventSource = activeDownloads.get(item.id);
+            if (!eventSource) {
+                return false;
+            }
+            eventSource.close(); // Server kills yt-dlp when the stream closes
+            activeDownloads.delete(item.id);
+            return true;
+        }
+        
+        function failDownload(item, message, output) {
+            if (!stopDownload(item)) {
+                return;
+            }
+            item.status = 'failed';
+            item.error = message;
+            item.errorOutput = output || message;
+            updateQueueDisplay();
+            // Keep failed item in queue - don't remove it
+            scheduleProcessQueue();
+        }
+        
+        function startDownload(item) {
+            item.status = 'processing';
+            item.progress = 0;
+            item.timeRemaining = null;
+            item.startTime = Date.now();
+            item.lastETAUpdateTime = 0;
             
-            console.log(`Processing queue item: ${currentItem.url}`);
+            console.log(`Processing queue item: ${item.url} (${activeDownloads.size + 1} active)`);
             
+            let eventSource;
             try {
                 // Use SSE for streaming progress
-                const eventSource = new EventSource(`/download-stream?url=${encodeURIComponent(currentItem.url)}&prefix=${encodeURIComponent(currentItem.prefix || '')}&destination=${encodeURIComponent(currentItem.destination || '')}`);
-                currentEventSource = eventSource;
-                
-                eventSource.onmessage = function(event) {
-                    try {
-                        const data = JSON.parse(event.data);
-                        
-                        if (data.type === 'output') {
-                            // Parse progress from the line
-                            const progressMatch = data.line.match(/\[download\]\s+(\d+\.?\d*)%/);
-                            if (progressMatch) {
-                                const percent = parseFloat(progressMatch[1]);
-                                currentItem.progress = percent;
-                                
-                                // Parse ETA from the same line (debounced to once per second)
-                                const now = Date.now();
-                                const shouldUpdateETA = now - lastETAUpdateTime >= 1000; // 1 second debounce
-                                
-                                if (shouldUpdateETA) {
-                                    const eta = parseETA(data.line, currentItem);
-                                    if (eta) {
-                                        currentItem.timeRemaining = eta;
-                                    }
-                                    lastETAUpdateTime = now;
+                eventSource = new EventSource(`/download-stream?url=${encodeURIComponent(item.url)}&prefix=${encodeURIComponent(item.prefix || '')}&destination=${encodeURIComponent(item.destination || '')}`);
+            } catch (error) {
+                item.status = 'failed';
+                item.error = 'Network error: ' + error.message;
+                item.errorOutput = 'Network error: ' + error.message;
+                console.error(`Network error for ${item.url}:`, error);
+                updateQueueDisplay();
+                return;
+            }
+            activeDownloads.set(item.id, eventSource);
+            updateQueueDisplay();
+            
+            eventSource.onmessage = function(event) {
+                if (activeDownloads.get(item.id) !== eventSource) {
+                    return;
+                }
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'output') {
+                        // Parse progress from the line
+                        const progressMatch = data.line.match(/\[download\]\s+(\d+\.?\d*)%/);
+                        if (progressMatch) {
+                            item.progress = parseFloat(progressMatch[1]);
+                            
+                            // Parse ETA from the same line (debounced to once per second)
+                            const now = Date.now();
+                            if (now - item.lastETAUpdateTime >= 1000) {
+                                const eta = parseETA(data.line, item);
+                                if (eta) {
+                                    item.timeRemaining = eta;
                                 }
-                                
-                                // Always update display for progress bar smoothness
-                                // ETA will only change when debounce allows it
-                                updateQueueDisplay();
+                                item.lastETAUpdateTime = now;
                             }
-                        } else if (data.type === 'done') {
-                        currentItem.status = 'completed';
-                        currentItem.progress = 100;
-                        currentItem.timeRemaining = null;
+                            
+                            scheduleProgressRender();
+                        }
+                    } else if (data.type === 'done') {
+                        stopDownload(item);
+                        item.status = 'completed';
+                        item.progress = 100;
+                        item.timeRemaining = null;
                         updateQueueDisplay();
-                        eventSource.close();
-                        currentEventSource = null;
-                        currentProcessingItem = null;
                         
                         // Remove completed item after delay
                         setTimeout(() => {
-                            downloadQueue = downloadQueue.filter(item => item.id !== currentItem.id);
+                            downloadQueue = downloadQueue.filter(queued => queued.id !== item.id);
                             updateQueueDisplay();
                             // Auto-save queue when completed item is removed
                             saveQueue();
                         }, 5000);
                         
-                        isProcessingQueue = false;
-                        
-                        // Process next item if any
-                        if (downloadQueue.some(item => item.status === 'pending')) {
-                            setTimeout(() => processQueue(), 1000);
-                        }
+                        scheduleProcessQueue();
                     } else if (data.type === 'error') {
-                        currentItem.status = 'failed';
-                        currentItem.error = data.message;
-                        currentItem.errorOutput = data.output || data.message;
-                        updateQueueDisplay();
-                        eventSource.close();
-                        currentEventSource = null;
-                        currentProcessingItem = null;
-                        
-                        // Keep failed item in queue - don't remove it
-                        isProcessingQueue = false;
-                        
-                        // Process next item if any
-                        if (downloadQueue.some(item => item.status === 'pending')) {
-                            setTimeout(() => processQueue(), 1000);
-                        }
+                        failDownload(item, data.message, data.output);
                     }
-                    } catch (error) {
-                        console.error('Error parsing SSE data:', error, event.data);
-                    }
-                };
-                
-                eventSource.onerror = function(event) {
-                    console.error('SSE error:', event);
-                    currentItem.status = 'failed';
-                    currentItem.error = 'Connection error';
-                    currentItem.errorOutput = 'Connection error occurred. Please try again.';
-                    updateQueueDisplay();
-                    eventSource.close();
-                    currentEventSource = null;
-                    currentProcessingItem = null;
-                    
-                    // Keep failed item in queue - don't remove it
-                    isProcessingQueue = false;
-                    
-                    if (downloadQueue.some(item => item.status === 'pending')) {
-                        setTimeout(() => processQueue(), 1000);
-                    }
-                };
-                
-            } catch (error) {
-                currentItem.status = 'failed';
-                currentItem.error = 'Network error: ' + error.message;
-                currentItem.errorOutput = 'Network error: ' + error.message;
-                console.error(`Network error for ${currentItem.url}:`, error);
-                updateQueueDisplay();
-                currentEventSource = null;
-                currentProcessingItem = null;
-                
-                // Keep failed item in queue - don't remove it
-                isProcessingQueue = false;
-                
-                if (downloadQueue.some(item => item.status === 'pending')) {
-                    setTimeout(() => processQueue(), 1000);
+                } catch (error) {
+                    console.error('Error parsing SSE data:', error, event.data);
                 }
-            }
+            };
+            
+            eventSource.onerror = function(event) {
+                console.error('SSE error:', event);
+                failDownload(item, 'Connection error', 'Connection error occurred. Please try again.');
+            };
         }
         
-        function skipCurrentDownload() {
-            if (!currentProcessingItem || !currentEventSource) {
+        function skipDownload(item) {
+            if (!stopDownload(item)) {
                 return;
             }
             
-            // Close the EventSource connection (this will trigger server-side cleanup)
-            currentEventSource.close();
-            currentEventSource = null;
-            
-            // Mark current item as paused
-            currentProcessingItem.status = 'paused';
-            currentProcessingItem.progress = 0;
-            
-            const skippedItem = currentProcessingItem;
-            currentProcessingItem = null;
-            
-            // Reset processing flag
-            isProcessingQueue = false;
-            
-            // Update display
+            item.status = 'paused';
+            item.progress = 0;
+            item.timeRemaining = null;
             updateQueueDisplay();
             
-            console.log(`Paused download: ${skippedItem.url}`);
+            console.log(`Paused download: ${item.url}`);
             
-            // Process next item if any
-            if (downloadQueue.some(item => item.status === 'pending')) {
-                setTimeout(() => processQueue(), 500);
-            }
+            scheduleProcessQueue(500);
         }
         
         function unpauseItem(itemId) {
@@ -1306,13 +1277,8 @@
             // Auto-save queue when status changes
             saveQueue();
             
-            // Only start processing if nothing is currently processing
-            // The queue processor will handle pending items in order when current item completes
-            if (!isProcessingQueue && !currentProcessingItem) {
-                processQueue();
-            }
-            // If something is currently processing, just leave the item as pending
-            // It will be processed in order after the current item completes
+            // Starts now if a slot is free; otherwise waits its turn as pending
+            processQueue();
         }
         
         function updateQueueDisplay() {
@@ -1379,8 +1345,7 @@
                         if (!item) return;
                         
                         if (item.status === 'processing') {
-                            // Skip the current processing download
-                            skipCurrentDownload();
+                            skipDownload(item);
                         } else if (item.status === 'failed') {
                             // Pause the failed item
                             item.status = 'paused';
@@ -1422,34 +1387,17 @@
         
         function removeFromQueue(itemId) {
             const item = downloadQueue.find(item => item.id === itemId);
-            
-            // If deleting the currently processing item, stop the download first
-            if (item && item.status === 'processing' && currentProcessingItem && currentProcessingItem.id === itemId) {
-                if (currentEventSource) {
-                    currentEventSource.close();
-                    currentEventSource = null;
-                }
-                currentProcessingItem = null;
-                isProcessingQueue = false;
-                
-                // Process next item if any
-                setTimeout(() => {
-                    downloadQueue = downloadQueue.filter(item => item.id !== itemId);
-                    updateQueueDisplay();
-                    // Auto-save queue when item is removed
-                    saveQueue();
-                    if (downloadQueue.some(item => item.status === 'pending')) {
-                        processQueue();
-                    }
-                }, 100);
-                return;
-            }
+            const wasActive = item ? stopDownload(item) : false;
             
             // Remove the item from queue
             downloadQueue = downloadQueue.filter(item => item.id !== itemId);
             updateQueueDisplay();
             // Auto-save queue when item is removed
             saveQueue();
+            
+            if (wasActive) {
+                processQueue();
+            }
         }
         
         function showErrorModal(itemId) {
@@ -1571,9 +1519,7 @@
                 
                 updateQueueDisplay();
                 
-                // Only start processing if there are pending items (not all paused)
-                // and nothing is currently processing
-                if (hasPendingItems && !isProcessingQueue && !currentProcessingItem) {
+                if (hasPendingItems) {
                     processQueue();
                 }
             } catch (error) {
@@ -1600,10 +1546,7 @@
             // Auto-save queue when status changes
             saveQueue();
             
-            // Start processing if nothing is currently processing
-            if (!isProcessingQueue && !currentProcessingItem) {
-                processQueue();
-            }
+            processQueue();
             
             showStatus(`Resumed ${pausedItems.length} item(s)`, 'success');
         }
@@ -1615,17 +1558,13 @@
                 return;
             }
             
-            // Stop any active download
-            if (currentEventSource) {
-                currentEventSource.close();
-                currentEventSource = null;
-            }
+            // Stop all active downloads
+            activeDownloads.forEach(eventSource => eventSource.close());
+            activeDownloads.clear();
             
             // Clear the queue
             const clearedCount = downloadQueue.length;
             downloadQueue = [];
-            currentProcessingItem = null;
-            isProcessingQueue = false;
             
             // Update display
             updateQueueDisplay();
