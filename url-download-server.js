@@ -227,7 +227,8 @@ app.get('/load-queue', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    // The app launcher matches on `app` to tell this server from others on the port
+    res.json({ status: 'ok', app: 'url-downloader', timestamp: new Date().toISOString() });
 });
 
 // Check if yt-dlp is installed

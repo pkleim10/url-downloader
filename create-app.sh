@@ -1,21 +1,22 @@
 #!/bin/bash
 
-# Create a macOS app bundle for URL Downloader
+# Create a macOS app bundle for URL Downloader.
+# The app is only a launcher: it runs the server from this project folder,
+# so changes to index.html or the server never need a rebuild.
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
 APP_NAME="URL Downloader"
 APP_DIR="${APP_NAME}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
+VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -1)
 
-# Create app bundle structure
-mkdir -p "$MACOS_DIR"
-mkdir -p "$RESOURCES_DIR"
-
-# Copy project files into Resources folder to make app self-contained
-echo "Bundling project files..."
-cp package.json "$RESOURCES_DIR/" 2>/dev/null || echo "Warning: package.json not found"
-cp url-download-server.js "$RESOURCES_DIR/" 2>/dev/null || echo "Warning: url-download-server.js not found"
-cp index.html "$RESOURCES_DIR/" 2>/dev/null || echo "Warning: index.html not found"
+rm -rf "$APP_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 # Create Info.plist
 cat > "${CONTENTS_DIR}/Info.plist" << EOF
@@ -30,9 +31,9 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
     <key>CFBundleName</key>
     <string>URL Downloader</string>
     <key>CFBundleVersion</key>
-    <string>1.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundlePackageType</key>
@@ -47,154 +48,106 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
 </plist>
 EOF
 
-# Create the executable script - SIMPLE VERSION
-cat > "${MACOS_DIR}/URL Downloader" << 'EOF'
-#!/bin/bash
+# Create the launcher. PROJECT_DIR is fixed at build time so the app
+# still works if it is copied elsewhere (e.g. /Applications).
+{
+    echo '#!/bin/bash'
+    printf 'PROJECT_DIR=%q\n' "$SCRIPT_DIR"
+    cat << 'EOF'
 
-# Simple URL Downloader App Launcher
+# URL Downloader app launcher
 
-# Get app directory
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_DIR="$(cd "$(dirname "$(dirname "$SCRIPT_DIR")")" && pwd)"
-RESOURCES_DIR="${APP_DIR}/Contents/Resources"
+URL="http://127.0.0.1:3000"
+LOG_DIR="$HOME/Library/Logs/URL Downloader"
+LOG_FILE="$LOG_DIR/server.log"
+mkdir -p "$LOG_DIR"
 
-# Change to Resources directory
-cd "$RESOURCES_DIR" || exit 1
+alert() {
+    osascript -e "display dialog \"$1\" with title \"URL Downloader\" buttons {\"OK\"} default button \"OK\"" >/dev/null
+}
 
-# Source shell profiles for PATH
+log_tail() {
+    tail -15 "$1" 2>/dev/null | sed "s/\"/'/g" | awk '{printf "%s\\n", $0}'
+}
+
+is_our_server() {
+    curl -s --max-time 2 "$URL/health" 2>/dev/null | grep -q '"app":"url-downloader"'
+}
+
+# Fall back to the folder that contains the app if the project moved
+if [ ! -f "$PROJECT_DIR/url-download-server.js" ]; then
+    APP_PATH="$(cd "$(dirname "$0")/../.." && pwd)"
+    PROJECT_DIR="$(dirname "$APP_PATH")"
+fi
+if [ ! -f "$PROJECT_DIR/url-download-server.js" ]; then
+    alert "Can't find the URL Downloader project folder.\n\nRun create-app.sh again from the project folder."
+    exit 1
+fi
+cd "$PROJECT_DIR" || exit 1
+
+# Already running (from Terminal or an earlier launch): just open the page
+if is_our_server; then
+    open "$URL"
+    exit 0
+fi
+
+# Apps launched from Finder get a minimal PATH
 [ -f "$HOME/.zshrc" ] && source "$HOME/.zshrc" 2>/dev/null
 [ -f "$HOME/.bash_profile" ] && source "$HOME/.bash_profile" 2>/dev/null
 export PATH="$PATH:/usr/local/bin:/opt/homebrew/bin"
 
-# Find node
 NODE_PATH=$(command -v node 2>/dev/null)
-[ -z "$NODE_PATH" ] && NODE_PATH="/opt/homebrew/bin/node"
-[ -z "$NODE_PATH" ] && NODE_PATH="/usr/local/bin/node"
-
-if [ ! -f "$NODE_PATH" ]; then
-    osascript -e 'display dialog "Node.js not found. Please install Node.js from https://nodejs.org/" buttons {"OK"} default button "OK"'
+[ -z "$NODE_PATH" ] && [ -x /opt/homebrew/bin/node ] && NODE_PATH=/opt/homebrew/bin/node
+[ -z "$NODE_PATH" ] && [ -x /usr/local/bin/node ] && NODE_PATH=/usr/local/bin/node
+if [ -z "$NODE_PATH" ]; then
+    alert "Node.js not found. Please install Node.js from https://nodejs.org/"
     exit 1
 fi
 
-# Check for yt-dlp
 if ! command -v yt-dlp &>/dev/null; then
-    osascript -e 'display dialog "yt-dlp not found. Please install: brew install yt-dlp" buttons {"OK"} default button "OK"'
+    alert "yt-dlp not found. Please install: brew install yt-dlp"
     exit 1
 fi
 
-# Install dependencies if needed
 if [ ! -d "node_modules" ]; then
     osascript -e 'display notification "Installing dependencies..." with title "URL Downloader"'
-    
-    # Find npm
     NPM_PATH=$(command -v npm 2>/dev/null)
     [ -z "$NPM_PATH" ] && NPM_PATH="$(dirname "$NODE_PATH")/npm"
-    
-    if [ ! -f "$NPM_PATH" ]; then
-        osascript -e 'display dialog "npm not found. Node.js installation may be incomplete." buttons {"OK"} default button "OK"'
-        exit 1
-    fi
-    
-    # Run npm install and capture output
-    "$NPM_PATH" install > npm-install.log 2>&1
-    NPM_EXIT=$?
-    
-    if [ $NPM_EXIT -ne 0 ]; then
-        # Read error from log
-        if [ -f npm-install.log ] && [ -s npm-install.log ]; then
-            ERROR_MSG=$(tail -15 npm-install.log | sed "s/\"/'/g" | awk '{printf "%s\\n", $0}')
-            osascript -e "display dialog \"Failed to install dependencies:\\n\\n$ERROR_MSG\" buttons {\"OK\"} default button \"OK\""
-        else
-            osascript -e "display dialog \"npm install failed with exit code $NPM_EXIT.\\n\\nCheck npm-install.log in:\\n$RESOURCES_DIR\" buttons {\"OK\"} default button \"OK\""
-        fi
-        exit 1
-    fi
-    
-    # Verify node_modules was created
-    if [ ! -d "node_modules" ]; then
-        osascript -e 'display dialog "npm install completed but node_modules not found." buttons {"OK"} default button "OK"'
+    if ! "$NPM_PATH" install > "$LOG_DIR/npm-install.log" 2>&1; then
+        alert "Failed to install dependencies:\n\n$(log_tail "$LOG_DIR/npm-install.log")"
         exit 1
     fi
 fi
 
-# Check if port 3000 is in use
-if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    osascript -e 'display dialog "Port 3000 is already in use. Please stop the existing server." buttons {"OK"} default button "OK"'
-    exit 1
-fi
-
-# Start server
 osascript -e 'display notification "Starting server..." with title "URL Downloader"'
-
-# Verify server file exists
-if [ ! -f "url-download-server.js" ]; then
-    osascript -e "display dialog \"Server file not found in:\\n$(pwd)\" buttons {\"OK\"} default button \"OK\""
-    exit 1
-fi
-
-# Start server in background, redirect output to log
-LOG_FILE="$(pwd)/server.log"
-rm -f "$LOG_FILE"
 "$NODE_PATH" url-download-server.js > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
-# Wait a moment for process to start
-sleep 1
+# Quitting the app stops the server it started
+trap 'kill $SERVER_PID 2>/dev/null' EXIT TERM INT HUP
 
-# Check if process is still running
-if ! kill -0 $SERVER_PID 2>/dev/null; then
-    # Process died immediately
-    sleep 1
-    if [ -f "$LOG_FILE" ] && [ -s "$LOG_FILE" ]; then
-        ERROR=$(tail -20 "$LOG_FILE" | sed "s/\"/'/g" | awk '{printf "%s\\n", $0}')
-        osascript -e "display dialog \"Server process died immediately:\\n\\n$ERROR\" buttons {\"OK\"} default button \"OK\""
-    else
-        osascript -e "display dialog \"Server process died immediately.\\n\\nNode: $NODE_PATH\\nDirectory: $(pwd)\\n\\nNo error output captured.\" buttons {\"OK\"} default button \"OK\""
+for _ in $(seq 1 20); do
+    if is_our_server; then
+        break
     fi
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+        break
+    fi
+    sleep 0.5
+done
+
+if ! is_our_server; then
+    alert "The server did not start.\n\n$(log_tail "$LOG_FILE")\n\nFull log: $LOG_FILE"
     exit 1
 fi
 
-# Wait for server to start listening
-sleep 3
+open "$URL"
 
-# Check if server is listening
-if ! lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    # Wait a bit more
-    sleep 2
-    if ! lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-        # Check if process is still running
-        if ! kill -0 $SERVER_PID 2>/dev/null; then
-            # Process died
-            if [ -f "$LOG_FILE" ] && [ -s "$LOG_FILE" ]; then
-                ERROR=$(tail -20 "$LOG_FILE" | sed "s/\"/'/g" | awk '{printf "%s\\n", $0}')
-                osascript -e "display dialog \"Server process died:\\n\\n$ERROR\" buttons {\"OK\"} default button \"OK\""
-            else
-                osascript -e 'display dialog "Server process died. No error output." buttons {"OK"} default button "OK"'
-            fi
-        else
-            # Process running but not listening
-            if [ -f "$LOG_FILE" ] && [ -s "$LOG_FILE" ]; then
-                ERROR=$(tail -20 "$LOG_FILE" | sed "s/\"/'/g" | awk '{printf "%s\\n", $0}')
-                osascript -e "display dialog \"Server started but not listening on port 3000:\\n\\n$ERROR\" buttons {\"OK\"} default button \"OK\""
-            else
-                osascript -e 'display dialog "Server started but not listening on port 3000. Check server.log for details." buttons {"OK"} default button "OK"'
-            fi
-        fi
-        kill $SERVER_PID 2>/dev/null
-        exit 1
-    fi
-fi
-
-# Open browser
-osascript -e 'display notification "Opening browser..." with title "URL Downloader"'
-open "http://127.0.0.1:3000"
-
-# Keep script running (wait for server)
 wait $SERVER_PID
 EOF
+} > "${MACOS_DIR}/URL Downloader"
 
-# Make executable
 chmod +x "${MACOS_DIR}/URL Downloader"
 
-echo "✓ Created ${APP_NAME}.app"
-echo "✓ App is self-contained and ready to use"
+echo "✓ Created ${APP_NAME}.app (${VERSION})"
+echo "✓ Runs the server from ${SCRIPT_DIR}"
