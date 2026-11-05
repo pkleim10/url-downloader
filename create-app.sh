@@ -20,6 +20,8 @@ RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -1)
 
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+# Regenerate with: swift icon/make-icon.swift
+cp icon/AppIcon.icns "$RESOURCES_DIR/AppIcon.icns"
 
 # Create Info.plist
 cat > "${CONTENTS_DIR}/Info.plist" << EOF
@@ -43,6 +45,8 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
     <string>APPL</string>
     <key>CFBundleSignature</key>
     <string>????</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleDisplayName</key>
     <string>Downloader</string>
     <key>LSMinimumSystemVersion</key>

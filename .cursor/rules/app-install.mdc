@@ -8,4 +8,5 @@ alwaysApply: true
 - The app is a launcher for the web page; it runs the server from this project folder.
 - Build it only with `bash create-app.sh`. That installs `/Applications/Downloader.app` and moves every other copy with bundle id `com.local.url-downloader` to the Trash (old in-repo builds, other clones such as `WebstormProjects/dl-url`, the former `URL Downloader.app`).
 - Never leave a copy anywhere but `/Applications`, and never commit the bundle (it is gitignored).
+- The icon is drawn by `icon/make-icon.swift` (`swift icon/make-icon.swift` writes `icon/AppIcon.icns`); `create-app.sh` bundles that file.
 - Rerun `create-app.sh` after changing `create-app.sh` itself or moving the project folder. Page and server changes need no rebuild.
