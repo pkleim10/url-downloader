@@ -262,6 +262,15 @@
             font-size: 12px;
             color: #666;
         }
+
+        .queue-item-error {
+            font-size: 12px;
+            color: #721c24;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         
         .queue-item-status {
             padding: 4px 8px;
@@ -1185,9 +1194,31 @@
             item.status = 'failed';
             item.error = message;
             item.errorOutput = output || message;
+            item.failReason = summarizeFailure(output, message);
             updateQueueDisplay();
             // Keep failed item in queue - don't remove it
             scheduleProcessQueue();
+        }
+        
+        // yt-dlp's own last "ERROR:" line says why; the generic message is the fallback
+        function summarizeFailure(output, message) {
+            const errorLines = (output || '').split('\n').filter(line => line.startsWith('ERROR:'));
+            const last = errorLines.length ? errorLines[errorLines.length - 1] : '';
+            return last.replace(/^ERROR:\s*/, '').trim() || message || 'Download failed';
+        }
+        
+        function escapeHtml(text) {
+            return String(text).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+        }
+        
+        function retryFailed(item) {
+            item.status = 'pending';
+            delete item.error;
+            delete item.errorOutput;
+            delete item.failReason;
+            updateQueueDisplay();
+            saveQueue();
+            processQueue();
         }
         
         function startDownload(item) {
@@ -1325,6 +1356,7 @@
                             <div class="queue-item-url">${item.url}</div>
                             ${item.prefix ? `<div class="queue-item-prefix">Prefix: ${item.prefix}</div>` : ''}
                             ${item.destination ? `<div class="queue-item-prefix">Destination: ${item.destination}</div>` : ''}
+                            ${item.status === 'failed' && item.failReason ? `<div class="queue-item-error" title="${escapeHtml(item.failReason)}">${escapeHtml(item.failReason)}</div>` : ''}
                             ${item.status === 'processing' ? `
                                 <div class="progress-bar-container">
                                     <div class="progress-bar" style="width: ${item.progress}%"></div>
@@ -1337,7 +1369,7 @@
                         </div>
                         <div class="queue-item-actions">
                             <span class="queue-item-status status-${item.status}" 
-                                  ${item.status === 'failed' ? `data-item-id="${item.id}" data-error="true" data-skip="true"` : ''}
+                                  ${item.status === 'failed' ? `data-item-id="${item.id}" data-error="true" data-skip="true" title="Click to retry"` : ''}
                                   ${item.status === 'processing' ? `data-item-id="${item.id}" data-skip="true"` : ''}
                                   ${item.status === 'paused' ? `data-item-id="${item.id}" data-paused="true"` : ''}
                                   ${item.status === 'pending' ? `data-item-id="${item.id}" data-pending="true"` : ''}>
@@ -1367,10 +1399,7 @@
                         if (item.status === 'processing') {
                             skipDownload(item);
                         } else if (item.status === 'failed') {
-                            // Pause the failed item
-                            item.status = 'paused';
-                            updateQueueDisplay();
-                            saveQueue();
+                            retryFailed(item);
                         }
                     });
                 });
