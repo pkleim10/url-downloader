@@ -1,21 +1,24 @@
 #!/bin/bash
 
-# Create a macOS app bundle for URL Downloader.
-# The app is only a launcher: it runs the server from this project folder,
-# so changes to index.html or the server never need a rebuild.
+# Build URL Downloader.app, install it to /Applications, and move any other
+# copies to the Trash. The app is only a launcher: it runs the server from
+# this project folder, so changes to index.html or the server never need a rebuild.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 APP_NAME="URL Downloader"
-APP_DIR="${APP_NAME}.app"
+BUNDLE_ID="com.local.url-downloader"
+INSTALL_PATH="/Applications/${APP_NAME}.app"
+BUILD_ROOT="$(mktemp -d)"
+trap 'rm -rf "$BUILD_ROOT"' EXIT
+APP_DIR="${BUILD_ROOT}/${APP_NAME}.app"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 VERSION=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -1)
 
-rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 # Create Info.plist
@@ -27,7 +30,7 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
     <key>CFBundleExecutable</key>
     <string>URL Downloader</string>
     <key>CFBundleIdentifier</key>
-    <string>com.local.url-downloader</string>
+    <string>${BUNDLE_ID}</string>
     <key>CFBundleName</key>
     <string>URL Downloader</string>
     <key>CFBundleVersion</key>
@@ -74,13 +77,8 @@ is_our_server() {
     curl -s --max-time 2 "$URL/health" 2>/dev/null | grep -q '"app":"url-downloader"'
 }
 
-# Fall back to the folder that contains the app if the project moved
 if [ ! -f "$PROJECT_DIR/url-download-server.js" ]; then
-    APP_PATH="$(cd "$(dirname "$0")/../.." && pwd)"
-    PROJECT_DIR="$(dirname "$APP_PATH")"
-fi
-if [ ! -f "$PROJECT_DIR/url-download-server.js" ]; then
-    alert "Can't find the URL Downloader project folder.\n\nRun create-app.sh again from the project folder."
+    alert "Can't find the URL Downloader project folder:\n$PROJECT_DIR\n\nRun create-app.sh again from the project folder."
     exit 1
 fi
 cd "$PROJECT_DIR" || exit 1
@@ -149,5 +147,36 @@ EOF
 
 chmod +x "${MACOS_DIR}/URL Downloader"
 
-echo "✓ Created ${APP_NAME}.app (${VERSION})"
+# Install (a running launcher keeps working; macOS holds the old file open)
+rm -rf "$INSTALL_PATH"
+ditto "$APP_DIR" "$INSTALL_PATH"
+echo "✓ Installed ${INSTALL_PATH} (${VERSION})"
 echo "✓ Runs the server from ${SCRIPT_DIR}"
+
+# Move every other copy to the Trash: the old in-repo build, other clones,
+# and anything Spotlight knows with this bundle id
+trash_copy() {
+    local copy="$1"
+    [ -d "$copy" ] || return 0
+    local real
+    real="$(cd "$copy" && pwd -P)"
+    [ "$real" = "$(cd "$INSTALL_PATH" && pwd -P)" ] && return 0
+    local name dest
+    name="$(basename "$copy")"
+    dest="$HOME/.Trash/${name%.app} $(date +%Y%m%d-%H%M%S)-$RANDOM.app"
+    mv "$copy" "$dest"
+    echo "✓ Moved old copy to Trash: $copy"
+}
+
+{
+    echo "${SCRIPT_DIR}/${APP_NAME}.app"
+    for parent in "$HOME/Applications" "$HOME/Desktop" "$HOME/Downloads" /Volumes/*/WebstormProjects/* /Volumes/*/WebStormProjects/*; do
+        echo "${parent}/${APP_NAME}.app"
+    done
+    mdfind "kMDItemCFBundleIdentifier == '${BUNDLE_ID}'" 2>/dev/null || true
+} | while IFS= read -r copy; do
+    case "$copy" in
+        "$HOME/.Trash/"*|*/.Trash/*|*/.Trashes/*) continue ;;
+        *.app) trash_copy "$copy" ;;
+    esac
+done
