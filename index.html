@@ -1143,8 +1143,28 @@
             }
             progressRenderTimer = setTimeout(() => {
                 progressRenderTimer = null;
-                updateQueueDisplay();
+                updateProgressInPlace();
             }, 250);
+        }
+        
+        // Rebuilding the list replaces its buttons, which swallows clicks in progress,
+        // so progress ticks only touch the bars; status changes still rebuild the list
+        function updateProgressInPlace() {
+            const queueList = document.getElementById('queueList');
+            for (const item of downloadQueue) {
+                if (item.status !== 'processing') {
+                    continue;
+                }
+                const row = queueList.querySelector(`[data-row-id="${item.id}"]`);
+                const bar = row && row.querySelector('.progress-bar');
+                if (!bar) {
+                    updateQueueDisplay();
+                    return;
+                }
+                bar.style.width = `${item.progress}%`;
+                row.querySelector('.progress-percentage').textContent = `${item.progress.toFixed(1)}%`;
+                row.querySelector('.progress-eta').textContent = item.timeRemaining || (item.progress > 0 && item.progress < 100 ? 'Calculating...' : '');
+            }
         }
         
         // Close an item's stream and free its slot; returns false if it was not active
@@ -1300,7 +1320,7 @@
                 }
             } else {
                 queueList.innerHTML = displayedItems.map(item => `
-                    <div class="queue-item">
+                    <div class="queue-item" data-row-id="${item.id}">
                         <div class="queue-item-info">
                             <div class="queue-item-url">${item.url}</div>
                             ${item.prefix ? `<div class="queue-item-prefix">Prefix: ${item.prefix}</div>` : ''}
@@ -1350,6 +1370,7 @@
                             // Pause the failed item
                             item.status = 'paused';
                             updateQueueDisplay();
+                            saveQueue();
                         }
                     });
                 });
@@ -1370,6 +1391,7 @@
                         if (item && item.status === 'pending') {
                             item.status = 'paused';
                             updateQueueDisplay();
+                            saveQueue();
                         }
                     });
                 });
@@ -1423,8 +1445,8 @@
             // Update immediately
             updateQueueDisplay();
             
-            // Then update every 2 seconds
-            queueUpdateInterval = setInterval(updateQueueDisplay, 2000);
+            // Then refresh progress every 2 seconds
+            queueUpdateInterval = setInterval(updateProgressInPlace, 2000);
         }
         
         function stopQueueUpdates() {
