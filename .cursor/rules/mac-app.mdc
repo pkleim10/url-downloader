@@ -7,9 +7,7 @@ alwaysApply: false
 # Native Siphon app (`mac/`)
 
 - SwiftUI, macOS 26, bundle id `com.machiilabs.siphon`; `mac/project.yml` (XcodeGen) is the source of truth. The `.xcodeproj` and `Info.plist` are generated and gitignored.
-- Build only with `bash mac/scripts/build_and_install.sh`: it bumps `CURRENT_PROJECT_VERSION`, builds Release, runs the unit tests, and prints `✓ Siphon <version> (<build>)`. Report that line.
-- `--integration` also runs `IntegrationTests` (a real yt-dlp download of the iStock sample into `/tmp`); run it after engine changes.
-- `/Applications/Siphon.app` is still the web version's launcher. Don't pass `--install` (and never `--replace-web-launcher`) until the user says the native app replaces it.
+- Build and install as described in `app-install.mdc`. `--integration` also runs `IntegrationTests` (a real yt-dlp download of the iStock sample into `/tmp`); run it after engine changes.
 - The app reads the repo's `sites/` folder (copied into the bundle at build time), so site entries work in both versions.
 - Views get `DownloadQueue` as an explicit parameter, not through the environment (same rule as Skagway).
 - Don't drive the GUI; hand the user repro steps instead.

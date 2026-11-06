@@ -1,12 +1,12 @@
 ---
-description: Siphon.app lives only in /Applications
+description: Siphon.app is built with mac/scripts/build_and_install.sh and lives only in /Applications
 alwaysApply: true
 ---
 
-# Siphon.app
+# Siphon.app install
 
-- The app is a launcher for the web page; it runs the server from this project folder.
-- Build it only with `bash create-app.sh`. That installs `/Applications/Siphon.app` and moves every other copy with bundle id `com.local.url-downloader` to the Trash (old in-repo builds, other clones such as `WebstormProjects/dl-url`, and the app's former names `Downloader.app` and `URL Downloader.app`).
-- Never leave a copy anywhere but `/Applications`, and never commit the bundle (it is gitignored).
-- The icon is drawn by `icon/make-icon.swift` (`swift icon/make-icon.swift` writes `icon/AppIcon.icns`); `create-app.sh` bundles that file.
-- Rerun `create-app.sh` after changing `create-app.sh` itself or moving the project folder. Page and server changes need no rebuild.
+- After every change to the native app, run `bash mac/scripts/build_and_install.sh` and report its final `✓ Siphon <version> (<build>) [Release]` line. A build without that line is incomplete.
+- Every normal run bumps `CURRENT_PROJECT_VERSION`, builds Release, runs the unit tests, installs to `/Applications/Siphon.app`, and runs `mac/scripts/cleanup_stray_siphon_apps.sh`.
+- The cleanup removes every other copy: the build product in `mac/DerivedData`, Xcode DerivedData builds, and the retired web-version launchers (bundle id `com.local.url-downloader`: `Siphon.app`, `Downloader.app`, `URL Downloader.app`, including clones such as `WebstormProjects/dl-url`).
+- Never leave a copy anywhere but `/Applications`, and never commit a bundle. Use `--no-install` only when the user explicitly asks for a build without installing.
+- The web page still runs without a launcher: `node url-download-server.js`, then open http://127.0.0.1:3000.

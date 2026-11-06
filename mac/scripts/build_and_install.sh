@@ -1,35 +1,32 @@
 #!/bin/bash
-# Build the native Siphon app and (optionally) install it to /Applications.
+# Build Siphon, install it to /Applications/Siphon.app, and remove every other copy.
 #
 # Default: Release build, auto-bumps CURRENT_PROJECT_VERSION in project.yml, runs the tests.
 #
 # Flags:
-#   --debug                 Build Debug instead of Release.
-#   --no-bump               Skip the build-number bump.
-#   --no-tests              Skip the unit tests.
-#   --integration           Also run IntegrationTests (real yt-dlp download over the network).
-#   --install               Copy the build to /Applications/Siphon.app.
-#   --replace-web-launcher  Allow --install to replace the web version's launcher
-#                           (bundle id com.local.url-downloader) at that path.
+#   --debug        Build Debug instead of Release.
+#   --no-bump      Skip the build-number bump.
+#   --no-tests     Skip the unit tests.
+#   --integration  Also run IntegrationTests (real yt-dlp download over the network).
+#   --no-install   Build only; don't install or clean up (only when explicitly asked).
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "${SCRIPT_DIR}/.."
 
 CONFIG="Release"
 BUMP=1
 TESTS=1
 INTEGRATION=0
-INSTALL=0
-REPLACE_LAUNCHER=0
+INSTALL=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --debug) CONFIG="Debug"; shift ;;
     --no-bump) BUMP=0; shift ;;
     --no-tests) TESTS=0; shift ;;
     --integration) INTEGRATION=1; shift ;;
-    --install) INSTALL=1; shift ;;
-    --replace-web-launcher) REPLACE_LAUNCHER=1; shift ;;
+    --no-install) INSTALL=0; shift ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
 done
@@ -90,25 +87,40 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "Built app not found at $APP_PATH" >&2
   exit 1
 fi
-echo "Built: $(cd "$(dirname "$APP_PATH")" && pwd)/Siphon.app"
+echo "Built: ${APP_PATH}"
 
 if [[ $INSTALL -eq 1 ]]; then
   DEST="/Applications/Siphon.app"
-  if [[ -d "$DEST" ]]; then
-    EXISTING_ID=$(defaults read "$DEST/Contents/Info" CFBundleIdentifier 2>/dev/null || true)
-    if [[ "$EXISTING_ID" == "com.local.url-downloader" && $REPLACE_LAUNCHER -eq 0 ]]; then
-      echo "✗ ${DEST} is the web version's launcher; rerun with --replace-web-launcher to replace it" >&2
-      exit 1
-    fi
-    if [[ -n "$EXISTING_ID" && "$EXISTING_ID" != "com.machiilabs.siphon" && "$EXISTING_ID" != "com.local.url-downloader" ]]; then
-      echo "✗ ${DEST} is a different app (${EXISTING_ID}); not replacing it" >&2
-      exit 1
-    fi
-    rm -rf "$DEST"
+  EXISTING_ID=""
+  [[ -d "$DEST" ]] && EXISTING_ID=$(defaults read "$DEST/Contents/Info" CFBundleIdentifier 2>/dev/null || true)
+  # The retired web-version launcher (com.local.url-downloader) is replaced; anything else is left alone
+  if [[ -n "$EXISTING_ID" && "$EXISTING_ID" != "com.machiilabs.siphon" && "$EXISTING_ID" != "com.local.url-downloader" ]]; then
+    echo "✗ ${DEST} is a different app (${EXISTING_ID}); not replacing it" >&2
+    exit 1
   fi
-  ditto "$APP_PATH" "$DEST"
-  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" >/dev/null 2>&1 || true
+
+  # In-place rsync keeps the same path (and TCC grants) and works while Siphon is running.
+  # When macOS blocks in-place writes (com.apple.macl after a download or Sparkle install),
+  # or the old bundle is the launcher, rename it aside and copy a fresh bundle instead.
+  install_ok=0
+  if [[ "$EXISTING_ID" == "com.machiilabs.siphon" ]] && touch "${DEST}/Contents/.siphon_install_probe" 2>/dev/null; then
+    rm -f "${DEST}/Contents/.siphon_install_probe"
+    rsync -a --delete "${APP_PATH}/" "${DEST}/" && install_ok=1
+  fi
+  if [[ $install_ok -eq 0 ]]; then
+    if [[ -d "$DEST" ]]; then
+      ASIDE="${DEST}.pre-update.$$"
+      rm -rf "$ASIDE"
+      mv "$DEST" "$ASIDE"
+      ditto "$APP_PATH" "$DEST"
+      rm -rf "$ASIDE"
+    else
+      ditto "$APP_PATH" "$DEST"
+    fi
+  fi
   echo "Installed: ${DEST}"
+
+  bash "${SCRIPT_DIR}/cleanup_stray_siphon_apps.sh"
 fi
 
 echo ""
