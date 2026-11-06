@@ -11,6 +11,7 @@ final class DownloadQueue {
     /// The yt-dlp command and output for each item since launch, newest attempt last; not saved.
     private(set) var logs: [UUID: [String]] = [:]
     static let logLimit = 1000
+    let updater = YtDlpUpdater()
 
     @ObservationIgnored private var processes: [UUID: DownloadProcess] = [:]
     /// Processes asked to stop that haven't exited yet; their item can't restart until they do,
@@ -42,6 +43,32 @@ final class DownloadQueue {
         items = store.load()
         ytDlpPath = YtDlpLocator.ytDlp
         scheduleDownloads()
+        Task { [updater, ytDlpPath] in
+            await updater.refresh(ytDlp: ytDlpPath)
+            await updater.checkIfDue(ytDlp: ytDlpPath)
+        }
+    }
+
+    var hasFailed: Bool { items.contains { $0.status == .failed } }
+
+    func retryAllFailed() {
+        for i in items.indices where items[i].status == .failed {
+            items[i].status = .pending
+            items[i].failReason = nil
+            items[i].note = nil
+            items[i].clearProgress()
+        }
+        save()
+        scheduleDownloads()
+    }
+
+    func checkForYtDlpUpdate() async {
+        await updater.check(ytDlp: ytDlpPath ?? YtDlpLocator.ytDlp)
+    }
+
+    func updateYtDlp() async {
+        await updater.update(ytDlp: ytDlpPath ?? YtDlpLocator.ytDlp)
+        ytDlpPath = YtDlpLocator.ytDlp
     }
 
     var activeCount: Int { items.filter { $0.status == .downloading }.count }

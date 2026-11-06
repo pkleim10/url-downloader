@@ -5,6 +5,8 @@ enum SettingsKey {
     static let maxConcurrent = "maxConcurrentDownloads"
     static let quality = "qualityPreset"
     static let learnSites = "learnSites"
+    static let autoCheckYtDlp = "autoCheckYtDlp"
+    static let lastYtDlpCheck = "lastYtDlpCheck"
 }
 
 enum AppSettings {
@@ -31,5 +33,9 @@ enum AppSettings {
 
     static var learnSites: Bool {
         UserDefaults.standard.object(forKey: SettingsKey.learnSites) as? Bool ?? true
+    }
+
+    static var autoCheckYtDlp: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.autoCheckYtDlp)
     }
 }

@@ -21,6 +21,7 @@ struct ContentView: View {
             if queue.ytDlpPath == nil {
                 missingYtDlpBanner
             }
+            UpdateBanner(queue: queue)
             queueSection
         }
         .padding(.horizontal, 20)
