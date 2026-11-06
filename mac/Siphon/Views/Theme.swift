@@ -72,6 +72,31 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Light bordered button whose border turns blue on hover, like the web page's queue actions.
+struct SecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(isEnabled ? Color.primary : Color.secondary.opacity(0.6))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Color.primary.opacity(configuration.isPressed ? 0.1 : 0.04),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(hovering && isEnabled ? Theme.accent : Color.primary.opacity(0.15))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.15), value: hovering)
+    }
+}
+
 struct FieldLabel: View {
     let text: String
     init(_ text: String) { self.text = text }

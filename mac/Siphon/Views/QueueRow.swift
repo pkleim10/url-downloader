@@ -69,7 +69,7 @@ struct QueueRow: View {
         if item.siteName != nil || !item.prefix.isEmpty {
             HStack(spacing: 6) {
                 if let site = item.siteName { tag(site, systemImage: "globe") }
-                if !item.prefix.isEmpty { tag(item.prefix, systemImage: "textformat") }
+                if !item.prefix.isEmpty { tag("Prefix: \(item.prefix)", systemImage: "tag") }
             }
         }
     }

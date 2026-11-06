@@ -121,15 +121,20 @@ struct ContentView: View {
 
     private var queueSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text("Queue")
-                    .font(.system(size: 15, weight: .semibold))
-                CountPill(text: "\(queue.items.count)")
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text("Queue")
+                            .font(.system(size: 15, weight: .semibold))
+                        CountPill(text: "\(queue.items.count)")
+                    }
+                    Text("\(queue.activeCount) of \(maxConcurrent) downloading")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
                 Spacer()
-                Text("\(queue.activeCount) of \(maxConcurrent) downloading")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                queueActions
             }
             .padding(.horizontal, 4)
 
@@ -161,6 +166,36 @@ struct ContentView: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var queueActions: some View {
+        HStack(spacing: 6) {
+            Button {
+                queue.pauseAll()
+            } label: {
+                Label("Pause All", systemImage: "pause.fill")
+            }
+            .help("Pause running and pending downloads")
+            .disabled(!queue.hasPausable)
+
+            Button {
+                queue.resumeAll()
+            } label: {
+                Label("Resume All", systemImage: "play.fill")
+            }
+            .help("Resume paused downloads")
+            .disabled(!queue.hasPaused)
+
+            Button {
+                queue.clearCompleted()
+            } label: {
+                Label("Clear Completed", systemImage: "checkmark.circle")
+            }
+            .help("Remove finished downloads from the queue; the files stay")
+            .disabled(!queue.hasCompleted)
+        }
+        .buttonStyle(SecondaryButtonStyle())
+        .labelStyle(.titleAndIcon)
     }
 
     private var destinationName: String {
@@ -211,30 +246,12 @@ struct ContentView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Button {
-                queue.pauseAll()
+                confirmClearAll = true
             } label: {
-                Label("Pause", systemImage: "pause.fill")
+                Label("Clear All", systemImage: "trash")
             }
-            .help("Pause running and pending downloads")
-            .disabled(!queue.hasPausable)
-
-            Button {
-                queue.resumeAll()
-            } label: {
-                Label("Resume", systemImage: "play.fill")
-            }
-            .help("Resume paused downloads")
-            .disabled(!queue.hasPaused)
-
-            Menu {
-                Button("Clear Finished") { queue.clearCompleted() }
-                    .disabled(!queue.hasCompleted)
-                Button("Clear All…") { confirmClearAll = true }
-                    .disabled(queue.items.isEmpty)
-            } label: {
-                Label("Clear", systemImage: "trash")
-            }
-            .help("Clear finished or all items")
+            .help("Remove every item from the queue")
+            .disabled(queue.items.isEmpty)
 
             Button {
                 openWindow(id: WindowID.sites)
