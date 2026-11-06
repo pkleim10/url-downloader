@@ -25,7 +25,6 @@ struct ContentView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
-        .frame(maxWidth: 820)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.pageBackground)
         .frame(minWidth: 580, minHeight: 560)
