@@ -15,14 +15,19 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     var notes: String?
     /// "learned" for entries Siphon recorded itself; nil for entries shipped in the repo.
     var source: String?
+    /// The page only embeds another host's player in an iframe; download the iframe's URL instead.
+    var followEmbed: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id, name, match, method, status, ytDlpArgs, plugin, exampleUrl, lastTested, testResult, notes, source
+        case followEmbed
     }
 
     init(id: String, name: String, match: [String], method: String, status: String,
          ytDlpArgs: [String] = [], plugin: String? = nil, exampleUrl: String? = nil,
-         lastTested: String? = nil, testResult: String? = nil, notes: String? = nil, source: String? = nil) {
+         lastTested: String? = nil, testResult: String? = nil, notes: String? = nil, source: String? = nil,
+         followEmbed: Bool? = nil) {
+        self.followEmbed = followEmbed
         self.id = id
         self.name = name
         self.match = match
@@ -53,6 +58,7 @@ struct SiteConfig: Codable, Identifiable, Equatable {
         testResult = try c.decodeIfPresent(String.self, forKey: .testResult)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
         source = try c.decodeIfPresent(String.self, forKey: .source)
+        followEmbed = try c.decodeIfPresent(Bool.self, forKey: .followEmbed)
     }
 
     func overlaps(_ other: SiteConfig) -> Bool {

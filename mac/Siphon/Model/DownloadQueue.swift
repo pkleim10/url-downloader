@@ -16,6 +16,10 @@ final class DownloadQueue {
     /// How many links the last `add` paused because they were downloaded before.
     private(set) var lastAddHeldDuplicates = 0
     @ObservationIgnored private var videoKeys: [UUID: String] = [:]
+    /// Player iframes found for items on sites that embed another host's player.
+    @ObservationIgnored private var embeds: [UUID: URL] = [:]
+    /// The pending iframe lookup per item; a stale lookup (item paused or restarted) is ignored.
+    @ObservationIgnored private var embedLookups: [UUID: UUID] = [:]
 
     @ObservationIgnored private var processes: [UUID: DownloadProcess] = [:]
     /// Processes asked to stop that haven't exited yet; their item can't restart until they do,
@@ -156,6 +160,7 @@ final class DownloadQueue {
         items[i].failReason = nil
         items[i].note = nil
         items[i].clearProgress()
+        embeds[id] = nil
         save()
         scheduleDownloads()
     }
@@ -165,6 +170,8 @@ final class DownloadQueue {
         learning[id] = nil
         logs[id] = nil
         videoKeys[id] = nil
+        embeds[id] = nil
+        embedLookups[id] = nil
         items.removeAll { $0.id == id }
         save()
         scheduleDownloads()
@@ -207,6 +214,8 @@ final class DownloadQueue {
         for id in Array(processes.keys) { stopProcess(id) }
         learning.removeAll()
         logs.removeAll()
+        embeds.removeAll()
+        embedLookups.removeAll()
         items.removeAll()
         save()
         updateDockBadge()
@@ -248,28 +257,7 @@ final class DownloadQueue {
             learning[id] = LearningState(attempts: SiteLearner.attempts(for: item.url, existing: site), existing: site)
         }
         let siteArguments = learning[id]?.current.arguments ?? site?.ytDlpArgs ?? []
-        let destination = URL(fileURLWithPath: item.destination, isDirectory: true)
-        try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-        let arguments = DownloadArguments.build(
-            url: item.url,
-            prefix: item.prefix,
-            destination: destination,
-            siteArguments: siteArguments,
-            pluginDirectory: sites.pluginDirectory,
-            quality: AppSettings.quality
-        )
-
-        if logs[id] != nil { appendLog(id, "") }
-        if let state = learning[id], state.index > 0 {
-            appendLog(id, "--- Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)")
-        }
-        appendLog(id, "$ " + ([ytDlp.path] + arguments).map(Self.shellQuoted).joined(separator: " "))
-        let process = DownloadProcess(executable: ytDlp, arguments: arguments)
-        process.onEvent = { [weak self] event in self?.handle(event, for: id) }
-        process.onExit = { [weak self, weak process] code, lines in
-            guard let self, let process else { return }
-            self.finish(id, process: process, exitCode: code, lines: lines)
-        }
+        let followEmbed = learning[id]?.current.followEmbed ?? (site?.followEmbed == true)
 
         items[i].status = .downloading
         items[i].siteName = site?.name
@@ -281,6 +269,63 @@ final class DownloadQueue {
                 : "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
         } else {
             items[i].note = nil
+        }
+        if logs[id] != nil { appendLog(id, "") }
+        if let state = learning[id], state.index > 0 {
+            appendLog(id, "--- Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)")
+        }
+
+        guard followEmbed else {
+            launch(id, ytDlp: ytDlp, url: item.url, siteArguments: siteArguments)
+            return
+        }
+        let embedArguments = siteArguments + ["--add-headers", "Referer:\(item.url)"]
+        if let embed = embeds[id] {
+            launch(id, ytDlp: ytDlp, url: embed.absoluteString, siteArguments: embedArguments)
+            return
+        }
+        guard let page = URL(string: item.url) else {
+            attemptFailed(id, reason: "No embedded player found on the page")
+            return
+        }
+        appendLog(id, "--- Looking for the page's embedded player")
+        let token = UUID()
+        embedLookups[id] = token
+        Task { [weak self] in
+            let embed = await EmbedFinder.fetchEmbed(for: page)
+            guard let self, self.embedLookups[id] == token else { return }
+            self.embedLookups[id] = nil
+            guard let i = self.index(of: id), self.items[i].status == .downloading else { return }
+            if let embed {
+                self.embeds[id] = embed
+                self.appendLog(id, "--- Found the player: \(embed.absoluteString)")
+                self.launch(id, ytDlp: ytDlp, url: embed.absoluteString, siteArguments: embedArguments)
+            } else {
+                self.appendLog(id, "--- No embedded player found on the page")
+                self.attemptFailed(id, reason: "No embedded player found on the page")
+                self.scheduleDownloads()
+            }
+        }
+    }
+
+    private func launch(_ id: UUID, ytDlp: URL, url: String, siteArguments: [String]) {
+        guard let item = items.first(where: { $0.id == id }) else { return }
+        let destination = URL(fileURLWithPath: item.destination, isDirectory: true)
+        try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let arguments = DownloadArguments.build(
+            url: url,
+            prefix: item.prefix,
+            destination: destination,
+            siteArguments: siteArguments,
+            pluginDirectory: sites.pluginDirectory,
+            quality: AppSettings.quality
+        )
+        appendLog(id, "$ " + ([ytDlp.path] + arguments).map(Self.shellQuoted).joined(separator: " "))
+        let process = DownloadProcess(executable: ytDlp, arguments: arguments)
+        process.onEvent = { [weak self] event in self?.handle(event, for: id) }
+        process.onExit = { [weak self, weak process] code, lines in
+            guard let self, let process else { return }
+            self.finish(id, process: process, exitCode: code, lines: lines)
         }
         processes[id] = process
         do {
@@ -338,43 +383,50 @@ final class DownloadQueue {
             videoKeys[id] = nil
             if let state = learning.removeValue(forKey: id) {
                 items[i].note = "Checking the file…"
-                recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state)
+                recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state, embedURL: embeds[id])
             }
         } else {
-            let reason = YtDlpOutputParser.failureReason(from: lines, exitCode: exitCode)
-            if var state = learning[id] {
-                let kind = SiteLearner.classify(reason)
-                if state.firstFailure == nil { state.firstFailure = reason }
-                if kind == .site, state.index + 1 < state.attempts.count {
-                    state.index += 1
-                    learning[id] = state
-                    items[i].status = .pending
-                    items[i].note = "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
-                    items[i].clearProgress()
-                    save()
-                    return
-                }
-                learning[id] = nil
-                if kind == .site || kind == .drm,
-                   let entry = SiteLearner.failedEntry(
-                       url: items[i].url, kind: kind, tried: Array(state.attempts[...state.index]),
-                       firstFailure: state.firstFailure, lastFailure: reason, existing: state.existing) {
-                    recordSite(entry)
-                    items[i].note = kind == .drm ? "Recorded in Sites as unsupported (DRM)" : "Recorded in Sites as broken"
-                } else {
-                    items[i].note = nil
-                }
-            }
-            items[i].status = .failed
-            items[i].failReason = reason
-            items[i].clearProgress()
+            attemptFailed(id, reason: YtDlpOutputParser.failureReason(from: lines, exitCode: exitCode))
+            return
         }
+        save()
+    }
+
+    /// While a site is being learned, moves on to the next fix; otherwise marks the item failed.
+    private func attemptFailed(_ id: UUID, reason: String) {
+        guard let i = index(of: id) else { return }
+        if var state = learning[id] {
+            let kind = SiteLearner.classify(reason)
+            if state.firstFailure == nil { state.firstFailure = reason }
+            if kind == .site, state.index + 1 < state.attempts.count {
+                state.index += 1
+                learning[id] = state
+                items[i].status = .pending
+                items[i].note = "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
+                items[i].clearProgress()
+                save()
+                return
+            }
+            learning[id] = nil
+            if kind == .site || kind == .drm,
+               let entry = SiteLearner.failedEntry(
+                   url: items[i].url, kind: kind, tried: Array(state.attempts[...state.index]),
+                   firstFailure: state.firstFailure, lastFailure: reason, existing: state.existing) {
+                recordSite(entry)
+                items[i].note = kind == .drm ? "Recorded in Sites as unsupported (DRM)" : "Recorded in Sites as broken"
+            } else {
+                items[i].note = nil
+            }
+        }
+        items[i].status = .failed
+        items[i].failReason = reason
+        items[i].clearProgress()
         save()
     }
 
     // MARK: - Learning sites
 
-    private func recordSuccess(_ id: UUID, url: String, path: String?, state: LearningState) {
+    private func recordSuccess(_ id: UUID, url: String, path: String?, state: LearningState, embedURL: URL?) {
         Task { [weak self] in
             let check = await MediaProbe.check(path: path)
             guard let self else { return }
@@ -382,7 +434,8 @@ final class DownloadQueue {
             if check.playable {
                 if let entry = SiteLearner.workingEntry(
                     url: url, attempt: state.current, extractor: state.extractor,
-                    firstFailure: state.firstFailure, testResult: check.summary, existing: state.existing) {
+                    firstFailure: state.firstFailure, testResult: check.summary, existing: state.existing,
+                    embedURL: embedURL) {
                     self.recordSite(entry)
                 }
                 if let i { self.items[i].note = state.existing == nil ? "Added to Sites" : "Sites entry updated" }

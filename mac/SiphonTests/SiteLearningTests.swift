@@ -75,14 +75,33 @@ struct SiteLearnerTests {
     @Test func attemptsStartPlainThenFixesWithoutDuplicates() {
         let plain = SiteLearner.attempts(for: "https://example.com/v/1", existing: nil)
         #expect(plain.first?.arguments == [])
-        #expect(plain.count == 4)
+        #expect(plain.count == 5)
         #expect(plain[2].arguments.contains("Referer:https://example.com/"))
+        #expect(plain.last?.followEmbed == true)
+        #expect(plain.dropLast().allSatisfy { !$0.followEmbed })
 
         let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "options", status: "working",
                                ytDlpArgs: ["--impersonate", "chrome"], source: "learned")
         let again = SiteLearner.attempts(for: "https://example.com/v/1", existing: saved)
         #expect(again.first?.arguments == ["--impersonate", "chrome"])
-        #expect(again.count == 4)
+        #expect(again.count == 5)
+
+        let embedSite = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "embed", status: "working",
+                                   source: "learned", followEmbed: true)
+        let embedFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: embedSite)
+        #expect(embedFirst.first?.followEmbed == true)
+        #expect(embedFirst.count == 5)
+    }
+
+    @Test func embedEntryRecordsFollowEmbed() throws {
+        let attempt = SiteLearner.Attempt(label: "following the page's embedded player", arguments: [], followEmbed: true)
+        let entry = try #require(SiteLearner.workingEntry(
+            url: "https://puncher.tube/video/1/x.html", attempt: attempt, extractor: "Generic",
+            firstFailure: "Unsupported URL", testResult: "Downloaded 74.8 MB", existing: nil,
+            embedURL: URL(string: "https://x-x-x.tube/embed/270856/")))
+        #expect(entry.method == "embed")
+        #expect(entry.followEmbed == true)
+        #expect(entry.notes?.contains("x-x-x.tube") == true)
     }
 
     @Test func classifiesFailures() {

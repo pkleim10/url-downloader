@@ -6,6 +6,8 @@ enum SiteLearner {
     struct Attempt: Equatable {
         let label: String
         let arguments: [String]
+        /// Download the player iframe the page embeds instead of the page (see `EmbedFinder`).
+        var followEmbed = false
     }
 
     enum FailureKind: Equatable {
@@ -38,7 +40,9 @@ enum SiteLearner {
     static func attempts(for url: String, existing: SiteConfig?) -> [Attempt] {
         let origin = URL(string: url).flatMap { u in u.scheme.flatMap { s in u.host.map { "\(s)://\($0)" } } } ?? ""
         var list: [Attempt] = []
-        if let existing, !existing.ytDlpArgs.isEmpty {
+        if let existing, existing.followEmbed == true {
+            list.append(Attempt(label: "following the page's embedded player", arguments: existing.ytDlpArgs, followEmbed: true))
+        } else if let existing, !existing.ytDlpArgs.isEmpty {
             list.append(Attempt(label: "saved options", arguments: existing.ytDlpArgs))
         }
         list += [
@@ -47,9 +51,10 @@ enum SiteLearner {
             Attempt(label: "browser impersonation with the site as referer",
                     arguments: ["--impersonate", "chrome", "--add-headers", "Referer:\(origin)/"]),
             Attempt(label: "scanning the page for media", arguments: ["--use-extractors", "generic", "--impersonate", "chrome"]),
+            Attempt(label: "following the page's embedded player", arguments: [], followEmbed: true),
         ]
-        var seen = Set<[String]>()
-        return list.filter { seen.insert($0.arguments).inserted }
+        var seen = Set<String>()
+        return list.filter { seen.insert("\($0.followEmbed)|\($0.arguments.joined(separator: "\u{1F}"))").inserted }
     }
 
     static func classify(_ reason: String) -> FailureKind {
@@ -78,12 +83,18 @@ enum SiteLearner {
     }
 
     static func workingEntry(url: String, attempt: Attempt, extractor: String?, firstFailure: String?,
-                             testResult: String, existing: SiteConfig?, date: Date = Date()) -> SiteConfig? {
+                             testResult: String, existing: SiteConfig?, embedURL: URL? = nil,
+                             date: Date = Date()) -> SiteConfig? {
         guard let domain = domain(for: url) else { return nil }
         let handler = extractor.map { "yt-dlp's \($0) extractor" } ?? "yt-dlp"
         let notes: String
-        if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments, let kept = existing.notes {
+        if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments,
+           (existing.followEmbed == true) == attempt.followEmbed, let kept = existing.notes {
             notes = kept
+        } else if attempt.followEmbed {
+            let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
+            let host = embedURL?.host.map { " from \($0)" } ?? ""
+            notes = "Learned by Siphon: \(before)The page has no video of its own; it embeds a player\(host) in an iframe, which yt-dlp doesn't follow. Siphon finds that iframe on each page and passes the player's URL to \(handler), with the page as referer."
         } else if attempt.arguments.isEmpty {
             notes = "Learned by Siphon on first download: \(handler) handled it with no extra options."
         } else {
@@ -92,9 +103,10 @@ enum SiteLearner {
         }
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: attempt.arguments.isEmpty ? "builtin" : "options", status: "working",
+            method: attempt.followEmbed ? "embed" : attempt.arguments.isEmpty ? "builtin" : "options", status: "working",
             ytDlpArgs: attempt.arguments, exampleUrl: existing?.exampleUrl ?? url,
-            lastTested: today(date), testResult: testResult, notes: notes, source: "learned"
+            lastTested: today(date), testResult: testResult, notes: notes, source: "learned",
+            followEmbed: attempt.followEmbed ? true : nil
         )
     }
 
