@@ -16,6 +16,13 @@ enum Formatters {
 
     /// "45.2% · 12.3 MB of 92 MB · 4.1 MB/s · 0:21 left", skipping unknown parts.
     static func progressDetail(for item: QueueItem) -> String {
+        [progressAmount(for: item), progressRemaining(for: item)]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    /// "45.2% · 12.3 MB of 92 MB · 4.1 MB/s", skipping unknown parts.
+    static func progressAmount(for item: QueueItem) -> String {
         var parts: [String] = []
         if let fraction = item.fraction {
             parts.append(String(format: "%.1f%%", fraction * 100))
@@ -24,7 +31,12 @@ enum Formatters {
             parts.append(item.totalBytes.map { "\(bytes(done)) of \(bytes($0))" } ?? bytes(done))
         }
         if let speed = item.speed { parts.append(self.speed(speed)) }
-        if let eta = item.eta, item.status == .downloading { parts.append(self.eta(eta)) }
         return parts.joined(separator: " · ")
+    }
+
+    /// "0:21 left" while downloading, otherwise empty.
+    static func progressRemaining(for item: QueueItem) -> String {
+        guard let eta = item.eta, item.status == .downloading else { return "" }
+        return self.eta(eta)
     }
 }

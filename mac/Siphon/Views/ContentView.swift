@@ -11,33 +11,24 @@ struct ContentView: View {
     @State private var prefix = ""
     @State private var addHint: String?
     @State private var confirmClearAll = false
-    @FocusState private var linkFieldFocused: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case links, prefix }
 
     var body: some View {
-        VStack(spacing: 0) {
-            addBar
-            Divider()
+        VStack(spacing: 16) {
+            addCard
             if queue.ytDlpPath == nil {
                 missingYtDlpBanner
             }
-            if queue.items.isEmpty {
-                ContentUnavailableView(
-                    "No downloads",
-                    systemImage: "arrow.down.circle",
-                    description: Text("Paste links above, or drop them on this window.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(queue.items) { item in
-                        QueueRow(item: item, queue: queue)
-                    }
-                    .onMove { queue.move(fromOffsets: $0, toOffset: $1) }
-                }
-                .listStyle(.inset)
-            }
+            queueSection
         }
-        .frame(minWidth: 560, minHeight: 360)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .frame(maxWidth: 820)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.pageBackground)
+        .frame(minWidth: 580, minHeight: 560)
         .toolbar { toolbarContent }
         .dropDestination(for: URL.self) { urls, _ in
             queue.add(text: urls.map(\.absoluteString).joined(separator: "\n"))
@@ -47,41 +38,129 @@ struct ContentView: View {
         } message: {
             Text("Running downloads stop. Files already downloaded stay where they are.")
         }
-        .onAppear { linkFieldFocused = true }
+        .onAppear { focusedField = .links }
     }
 
-    // MARK: - Add bar
+    // MARK: - Add card
 
-    private var addBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                TextField("Paste one or more links", text: $linkText, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($linkFieldFocused)
-                    .onSubmit(addLinks)
-                Button("Add", action: addLinks)
-                    .disabled(linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            HStack(spacing: 8) {
-                TextField("Filename prefix (optional)", text: $prefix)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 220)
-                Button {
-                    chooseDestination()
-                } label: {
-                    Label(destinationName, systemImage: "folder")
-                }
-                .help("Save to \(AppSettings.destination)")
-                Spacer()
-                if let addHint {
-                    Text(addHint)
-                        .font(.caption)
+    private var addCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Siphon")
+                        .font(.system(size: 20, weight: .bold))
+                    Text("Paste links or drop them on this window")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
             }
+
+            VStack(alignment: .leading, spacing: 5) {
+                FieldLabel("Links")
+                FieldBox(focused: focusedField == .links) {
+                    TextField("Paste one or more URLs", text: $linkText, axis: .vertical)
+                        .lineLimit(1...4)
+                        .focused($focusedField, equals: .links)
+                        .onSubmit(addLinks)
+                }
+            }
+
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    FieldLabel("Filename prefix")
+                    FieldBox(focused: focusedField == .prefix) {
+                        TextField("Optional", text: $prefix)
+                            .focused($focusedField, equals: .prefix)
+                            .onSubmit(addLinks)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    FieldLabel("Save to")
+                    Button(action: chooseDestination) {
+                        FieldBox(focused: false) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "folder.fill")
+                                    .foregroundStyle(Theme.accent)
+                                Text(destinationName)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer(minLength: 4)
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Save to \(AppSettings.destination)")
+                }
+            }
+
+            Button(action: addLinks) {
+                Label("Add to Queue", systemImage: "arrow.down.circle.fill")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(linkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            if let addHint {
+                Text(addHint)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity)
+            }
         }
-        .padding(12)
+        .card(padding: 20)
+    }
+
+    // MARK: - Queue
+
+    private var queueSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Queue")
+                    .font(.system(size: 15, weight: .semibold))
+                CountPill(text: "\(queue.items.count)")
+                Spacer()
+                Text("\(queue.activeCount) of \(maxConcurrent) downloading")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 4)
+
+            if queue.items.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "tray")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.tertiary)
+                    Text("No downloads yet")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .card()
+                .padding(.bottom, 20)
+            } else {
+                List {
+                    ForEach(queue.items) { item in
+                        QueueRow(item: item, queue: queue)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    }
+                    .onMove { queue.move(fromOffsets: $0, toOffset: $1) }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .contentMargins(.bottom, 16, for: .scrollContent)
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var destinationName: String {
@@ -92,15 +171,15 @@ struct ContentView: View {
     private var missingYtDlpBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(.orange)
             Text("yt-dlp isn't installed. Install it with Homebrew: brew install yt-dlp")
             Spacer()
             Button("Check Again") { queue.reloadSites() }
         }
         .font(.callout)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.yellow.opacity(0.12))
+        .padding(12)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.orange.opacity(0.3)))
     }
 
     private func addLinks() {
@@ -111,7 +190,7 @@ struct ContentView: View {
         } else {
             addHint = "No http or https links found"
         }
-        linkFieldFocused = true
+        focusedField = .links
     }
 
     private func chooseDestination() {
@@ -130,12 +209,6 @@ struct ContentView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            Text("\(queue.activeCount) of \(maxConcurrent) downloading")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
         ToolbarItemGroup(placement: .primaryAction) {
             Button {
                 queue.pauseAll()
