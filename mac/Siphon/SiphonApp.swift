@@ -18,6 +18,11 @@ struct SiphonApp: App {
         }
         .defaultSize(width: 640, height: 520)
 
+        Window("History", id: WindowID.history) {
+            HistoryView(queue: queue)
+        }
+        .defaultSize(width: 720, height: 560)
+
         Settings {
             SettingsView(queue: queue)
         }
@@ -27,6 +32,7 @@ struct SiphonApp: App {
 enum WindowID {
     static let main = "main"
     static let sites = "sites"
+    static let history = "history"
 }
 
 @MainActor

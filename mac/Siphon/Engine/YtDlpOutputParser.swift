@@ -27,7 +27,8 @@ enum YtDlpEvent: Equatable {
     case title(String)
     case progress(DownloadProgress)
     case file(String)
-    case extractor(String)
+    /// Which yt-dlp extractor handled the video, its id, and whether it's part of a playlist.
+    case extractor(name: String, videoID: String?, inPlaylist: Bool)
     case output(String)
 }
 
@@ -61,7 +62,13 @@ enum YtDlpOutputParser {
             return .file(String(line.dropFirst(DownloadArguments.filePrefix.count)))
         }
         if line.hasPrefix(DownloadArguments.extractorPrefix) {
-            return .extractor(String(line.dropFirst(DownloadArguments.extractorPrefix.count)))
+            let fields = line.dropFirst(DownloadArguments.extractorPrefix.count)
+                .split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            func field(_ i: Int) -> String? {
+                guard i < fields.count, fields[i] != "NA", !fields[i].isEmpty else { return nil }
+                return fields[i]
+            }
+            return .extractor(name: field(0) ?? "Unknown", videoID: field(1), inPlaylist: field(2) != nil)
         }
         return .output(line)
     }

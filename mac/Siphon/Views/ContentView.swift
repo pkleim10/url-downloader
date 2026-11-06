@@ -222,6 +222,10 @@ struct ContentView: View {
         if added > 0 {
             linkText = ""
             addHint = added == 1 ? "Added 1 link" : "Added \(added) links"
+            let held = queue.lastAddHeldDuplicates
+            if held > 0 {
+                addHint! += held == 1 ? ". 1 was downloaded before and is paused" : ". \(held) were downloaded before and are paused"
+            }
         } else {
             addHint = "No http or https links found"
         }
@@ -252,6 +256,13 @@ struct ContentView: View {
             }
             .help("Remove every item from the queue")
             .disabled(queue.items.isEmpty)
+
+            Button {
+                openWindow(id: WindowID.history)
+            } label: {
+                Label("History", systemImage: "clock.arrow.circlepath")
+            }
+            .help("Finished downloads")
 
             Button {
                 openWindow(id: WindowID.sites)

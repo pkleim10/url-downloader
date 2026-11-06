@@ -25,6 +25,9 @@ struct QueueItem: Identifiable, Codable, Equatable {
     var siteName: String?
     var failReason: String?
     var filePath: String?
+    /// Paused because it was downloaded before; resuming downloads it anyway.
+    var heldAsDuplicate: Bool?
+    var allowDuplicate: Bool?
 
     // Live progress; not saved
     var fraction: Double?
@@ -37,6 +40,7 @@ struct QueueItem: Identifiable, Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case id, url, prefix, destination, status, addedAt, title, siteName, failReason, filePath
+        case heldAsDuplicate, allowDuplicate
     }
 
     init(url: String, prefix: String = "", destination: String, status: DownloadStatus = .pending) {

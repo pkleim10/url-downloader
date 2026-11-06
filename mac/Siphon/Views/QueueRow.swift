@@ -30,7 +30,12 @@ struct QueueRow: View {
                     progress
                         .padding(.top, 2)
                 }
-                if let note = item.note {
+                if item.heldAsDuplicate == true {
+                    Label("Downloaded before. Click Duplicate to download it again.", systemImage: "doc.on.doc")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.purple)
+                        .lineLimit(1)
+                } else if let note = item.note {
                     Label(note, systemImage: "wand.and.stars")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Theme.accent)
@@ -130,13 +135,15 @@ struct QueueRow: View {
 
     /// Clicking the badge does the obvious next thing, as on the web page.
     private var statusBadge: some View {
-        Button(action: badgeAction) {
-            Text(item.status.label)
+        let held = item.heldAsDuplicate == true
+        let tint = held ? Color.purple : item.status.tint
+        return Button(action: badgeAction) {
+            Text(held ? "Duplicate" : item.status.label)
                 .font(.system(size: 11, weight: .semibold))
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
-                .foregroundStyle(item.status.tint)
-                .background(item.status.tint.opacity(0.15), in: Capsule())
+                .foregroundStyle(tint)
+                .background(tint.opacity(0.15), in: Capsule())
         }
         .buttonStyle(.plain)
         .help(badgeHelp)
@@ -146,7 +153,7 @@ struct QueueRow: View {
     private var badgeHelp: String {
         switch item.status {
         case .pending, .downloading: "Click to pause"
-        case .paused: "Click to resume"
+        case .paused: item.heldAsDuplicate == true ? "Click to download it again" : "Click to resume"
         case .failed: "Click to retry"
         case .completed: "Downloaded"
         }
@@ -167,7 +174,7 @@ struct QueueRow: View {
         case .pending, .downloading:
             Button("Pause") { queue.pause(item.id) }
         case .paused:
-            Button("Resume") { queue.resume(item.id) }
+            Button(item.heldAsDuplicate == true ? "Download Again" : "Resume") { queue.resume(item.id) }
         case .failed:
             Button("Retry") { queue.retry(item.id) }
         case .completed:

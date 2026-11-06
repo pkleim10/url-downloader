@@ -20,7 +20,8 @@ struct IntegrationTests {
         let queue = DownloadQueue(
             store: QueueStore(fileURL: scratch.appendingPathComponent("queue.json")),
             siteStore: SiteStore(folder: scratch.appendingPathComponent("sites", isDirectory: true)),
-            bundledSites: sitesFolder
+            bundledSites: sitesFolder,
+            history: DownloadHistory(fileURL: scratch.appendingPathComponent("history.json"))
         )
         #expect(queue.add(text: Self.sampleURL, prefix: "test", destination: scratch.path) == 1)
 
@@ -39,6 +40,13 @@ struct IntegrationTests {
         let log = queue.logs[item.id] ?? []
         #expect(log.first?.hasPrefix("$ ") == true && log.first?.contains("yt-dlp") == true)
         #expect(log.last == "--- yt-dlp exited with code 0")
+
+        let recorded = try #require(queue.history.entries.first)
+        #expect(recorded.filePath == path)
+        #expect(recorded.sizeBytes == 5_587_508)
+        #expect(recorded.videoKey?.hasPrefix("Generic:") == true, "\(recorded.videoKey ?? "-")")
+        #expect(queue.add(text: Self.sampleURL, destination: scratch.path) == 1)
+        #expect(queue.items.last?.heldAsDuplicate == true)
         if keep { print("SIPHON_FILE=\(path)") }
     }
 
@@ -55,7 +63,8 @@ struct IntegrationTests {
         let queue = DownloadQueue(
             store: QueueStore(fileURL: scratch.appendingPathComponent("queue.json")),
             siteStore: siteStore,
-            bundledSites: emptyBundle
+            bundledSites: emptyBundle,
+            history: DownloadHistory(fileURL: scratch.appendingPathComponent("history.json"))
         )
         #expect(queue.add(text: Self.sampleURL, destination: scratch.path) == 1)
 

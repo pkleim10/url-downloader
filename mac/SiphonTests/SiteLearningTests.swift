@@ -145,6 +145,9 @@ struct MediaProbeTests {
     }
 
     @Test func parsesExtractorLine() {
-        #expect(YtDlpOutputParser.parse(line: "SIPHON-EXTRACTOR Generic") == .extractor("Generic"))
+        #expect(YtDlpOutputParser.parse(line: "SIPHON-EXTRACTOR Generic|clip-1|NA")
+            == .extractor(name: "Generic", videoID: "clip-1", inPlaylist: false))
+        #expect(YtDlpOutputParser.parse(line: "SIPHON-EXTRACTOR Youtube|abc|3")
+            == .extractor(name: "Youtube", videoID: "abc", inPlaylist: true))
     }
 }

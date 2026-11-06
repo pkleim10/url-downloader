@@ -73,7 +73,7 @@ enum DownloadArguments {
             "--progress-template",
             "download:\(progressPrefix)%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(progress.fragment_index)s|%(progress.fragment_count)s",
             "--print", "before_dl:\(titlePrefix)%(title)s",
-            "--print", "before_dl:\(extractorPrefix)%(extractor_key)s",
+            "--print", "before_dl:\(extractorPrefix)%(extractor_key)s|%(id)s|%(playlist_index)s",
             "--print", "after_move:\(filePrefix)%(filepath)s",
             "-o", outputTemplate(destination: destination, prefix: prefix),
             "--", url,

@@ -12,6 +12,10 @@ final class DownloadQueue {
     private(set) var logs: [UUID: [String]] = [:]
     static let logLimit = 1000
     let updater = YtDlpUpdater()
+    let history: DownloadHistory
+    /// How many links the last `add` paused because they were downloaded before.
+    private(set) var lastAddHeldDuplicates = 0
+    @ObservationIgnored private var videoKeys: [UUID: String] = [:]
 
     @ObservationIgnored private var processes: [UUID: DownloadProcess] = [:]
     /// Processes asked to stop that haven't exited yet; their item can't restart until they do,
@@ -35,8 +39,10 @@ final class DownloadQueue {
 
     init(store: QueueStore = QueueStore(fileURL: QueueStore.defaultFileURL),
          siteStore: SiteStore = SiteStore(folder: SiteStore.defaultFolder),
-         bundledSites: URL? = SiteRegistry.bundledFolder) {
+         bundledSites: URL? = SiteRegistry.bundledFolder,
+         history: DownloadHistory? = nil) {
         self.store = store
+        self.history = history ?? DownloadHistory()
         self.siteStore = siteStore
         self.bundledSites = bundledSites
         sites = siteStore.prepare(bundled: bundledSites)
@@ -50,6 +56,17 @@ final class DownloadQueue {
     }
 
     var hasFailed: Bool { items.contains { $0.status == .failed } }
+
+    /// Queues a link from History again, skipping the duplicate check.
+    func downloadAgain(_ entry: HistoryEntry) {
+        var item = QueueItem(url: entry.url, destination: AppSettings.destination)
+        item.siteName = sites.site(for: entry.url)?.name
+        item.title = entry.title
+        item.allowDuplicate = true
+        items.append(item)
+        save()
+        scheduleDownloads()
+    }
 
     func retryAllFailed() {
         for i in items.indices where items[i].status == .failed {
@@ -73,7 +90,7 @@ final class DownloadQueue {
 
     var activeCount: Int { items.filter { $0.status == .downloading }.count }
     var hasPausable: Bool { items.contains { $0.status == .downloading || $0.status == .pending } }
-    var hasPaused: Bool { items.contains { $0.status == .paused } }
+    var hasPaused: Bool { items.contains { $0.status == .paused && $0.heldAsDuplicate != true } }
     var hasCompleted: Bool { items.contains { $0.status == .completed } }
 
     // MARK: - Adding
@@ -82,9 +99,16 @@ final class DownloadQueue {
     @discardableResult
     func add(text: String, prefix: String = "", destination: String = AppSettings.destination) -> Int {
         let links = LinkExtractor.links(in: text)
+        lastAddHeldDuplicates = 0
         for link in links {
             var item = QueueItem(url: link, prefix: prefix, destination: destination)
             item.siteName = sites.site(for: link)?.name
+            if let earlier = history.duplicate(ofURL: link) {
+                item.status = .paused
+                item.heldAsDuplicate = true
+                item.title = earlier.title
+                lastAddHeldDuplicates += 1
+            }
             items.append(item)
         }
         if !links.isEmpty {
@@ -116,6 +140,10 @@ final class DownloadQueue {
     /// Unpauses an item; it starts as soon as a slot is free.
     func resume(_ id: UUID) {
         guard let i = index(of: id), items[i].status == .paused else { return }
+        if items[i].heldAsDuplicate == true {
+            items[i].heldAsDuplicate = nil
+            items[i].allowDuplicate = true
+        }
         items[i].status = .pending
         save()
         scheduleDownloads()
@@ -136,6 +164,7 @@ final class DownloadQueue {
         stopProcess(id)
         learning[id] = nil
         logs[id] = nil
+        videoKeys[id] = nil
         items.removeAll { $0.id == id }
         save()
         scheduleDownloads()
@@ -159,8 +188,9 @@ final class DownloadQueue {
         updateDockBadge()
     }
 
+    /// Items held as duplicates stay paused; they only download when resumed one by one.
     func resumeAll() {
-        for i in items.indices where items[i].status == .paused {
+        for i in items.indices where items[i].status == .paused && items[i].heldAsDuplicate != true {
             items[i].status = .pending
         }
         save()
@@ -275,8 +305,14 @@ final class DownloadQueue {
             if let fraction = progress.fraction { items[i].fraction = fraction }
         case .file(let path):
             items[i].filePath = path
-        case .extractor(let name):
+        case .extractor(let name, let videoID, let inPlaylist):
             learning[id]?.extractor = name
+            guard !inPlaylist, let videoID else { break }
+            let key = "\(name):\(videoID)"
+            videoKeys[id] = key
+            if items[i].allowDuplicate != true, let earlier = history.duplicate(ofVideoKey: key) {
+                holdAsDuplicate(id, earlier: earlier)
+            }
         case .output(let line):
             appendLog(id, line)
         }
@@ -293,6 +329,13 @@ final class DownloadQueue {
             items[i].fraction = 1
             items[i].speed = nil
             items[i].eta = nil
+            if AppSettings.keepHistory {
+                history.record(HistoryEntry(
+                    url: items[i].url, title: items[i].title, filePath: items[i].filePath,
+                    siteName: items[i].siteName, videoKey: videoKeys[id],
+                    sizeBytes: items[i].filePath.flatMap(Self.fileSize), downloadedAt: Date()))
+            }
+            videoKeys[id] = nil
             if let state = learning.removeValue(forKey: id) {
                 items[i].note = "Checking the file…"
                 recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state)
@@ -383,6 +426,20 @@ final class DownloadQueue {
         items[i].failReason = reason
         items[i].clearProgress()
         save()
+    }
+
+    private func holdAsDuplicate(_ id: UUID, earlier: HistoryEntry) {
+        guard let i = index(of: id) else { return }
+        stopProcess(id)
+        items[i].status = .paused
+        items[i].heldAsDuplicate = true
+        items[i].clearProgress()
+        appendLog(id, "--- Same video as \"\(earlier.displayTitle)\", downloaded \(earlier.downloadedAt.formatted(date: .abbreviated, time: .shortened)). Paused; resume to download it again.")
+        save()
+    }
+
+    nonisolated static func fileSize(_ path: String) -> Int64? {
+        (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value
     }
 
     private func appendLog(_ id: UUID, _ line: String) {

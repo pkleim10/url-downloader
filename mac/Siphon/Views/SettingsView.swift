@@ -9,6 +9,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.quality) private var quality = QualityPreset.configFile
     @AppStorage(SettingsKey.learnSites) private var learnSites = true
     @AppStorage(SettingsKey.autoCheckYtDlp) private var autoCheckYtDlp = false
+    @AppStorage(SettingsKey.keepHistory) private var keepHistory = true
+    @State private var confirmClearHistory = false
 
     private var updater: YtDlpUpdater { queue.updater }
 
@@ -58,6 +60,22 @@ struct SettingsView: View {
                 ForEach(QualityPreset.allCases) { preset in
                     Text(preset.label).tag(preset)
                 }
+            }
+            Toggle(isOn: $keepHistory) {
+                Text("Keep download history")
+                Text("Lists finished downloads in History and warns before downloading the same video twice. Stored only on this Mac.")
+            }
+            LabeledContent {
+                Button("Clear History…") { confirmClearHistory = true }
+                    .disabled(queue.history.entries.isEmpty)
+            } label: {
+                Text("\(queue.history.entries.count) downloads in history")
+                    .foregroundStyle(.secondary)
+            }
+            .confirmationDialog("Clear all download history?", isPresented: $confirmClearHistory) {
+                Button("Clear History", role: .destructive) { queue.history.clear() }
+            } message: {
+                Text("Downloaded files stay where they are.")
             }
             Toggle(isOn: $learnSites) {
                 Text("Learn new sites")

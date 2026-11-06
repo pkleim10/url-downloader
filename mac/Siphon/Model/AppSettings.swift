@@ -6,6 +6,7 @@ enum SettingsKey {
     static let quality = "qualityPreset"
     static let learnSites = "learnSites"
     static let autoCheckYtDlp = "autoCheckYtDlp"
+    static let keepHistory = "keepHistory"
     static let lastYtDlpCheck = "lastYtDlpCheck"
 }
 
@@ -33,6 +34,10 @@ enum AppSettings {
 
     static var learnSites: Bool {
         UserDefaults.standard.object(forKey: SettingsKey.learnSites) as? Bool ?? true
+    }
+
+    static var keepHistory: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.keepHistory) as? Bool ?? true
     }
 
     static var autoCheckYtDlp: Bool {
