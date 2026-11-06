@@ -490,7 +490,7 @@ process.stdin.resume();
 let server;
 try {
     server = app.listen(PORT, '127.0.0.1', () => {
-        console.log(`URL Downloader server running at http://127.0.0.1:${PORT}`);
+        console.log(`Siphon server running at http://127.0.0.1:${PORT}`);
         console.log('Open your browser and navigate to the URL above');
         console.log('Make sure yt-dlp is installed: brew install yt-dlp');
         // Flush stdout to ensure message is written

@@ -1,4 +1,4 @@
-// Renders the Downloader app icon to icon/AppIcon.icns.
+// Renders the Siphon app icon to icon/AppIcon.icns.
 // Usage: swift icon/make-icon.swift   (from the project folder)
 import AppKit
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build Downloader.app, install it to /Applications, and move any other
+# Build Siphon.app, install it to /Applications, and move any other
 # copies to the Trash. The app is only a launcher: it runs the server from
 # this project folder, so changes to index.html or the server never need a rebuild.
 set -e
@@ -8,7 +8,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-APP_NAME="Downloader"
+APP_NAME="Siphon"
+# Earlier names of this app; their copies are moved to the Trash too
+OLD_NAMES=("Downloader" "URL Downloader")
 BUNDLE_ID="com.local.url-downloader"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 BUILD_ROOT="$(mktemp -d)"
@@ -30,11 +32,11 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>Downloader</string>
+    <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleName</key>
-    <string>Downloader</string>
+    <string>${APP_NAME}</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -48,7 +50,7 @@ cat > "${CONTENTS_DIR}/Info.plist" << EOF
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleDisplayName</key>
-    <string>Downloader</string>
+    <string>${APP_NAME}</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.14</string>
 </dict>
@@ -62,15 +64,15 @@ EOF
     printf 'PROJECT_DIR=%q\n' "$SCRIPT_DIR"
     cat << 'EOF'
 
-# Downloader app launcher
+# Siphon app launcher
 
 URL="http://127.0.0.1:3000"
-LOG_DIR="$HOME/Library/Logs/Downloader"
+LOG_DIR="$HOME/Library/Logs/Siphon"
 LOG_FILE="$LOG_DIR/server.log"
 mkdir -p "$LOG_DIR"
 
 alert() {
-    osascript -e "display dialog \"$1\" with title \"Downloader\" buttons {\"OK\"} default button \"OK\"" >/dev/null
+    osascript -e "display dialog \"$1\" with title \"Siphon\" buttons {\"OK\"} default button \"OK\"" >/dev/null
 }
 
 log_tail() {
@@ -82,7 +84,7 @@ is_our_server() {
 }
 
 if [ ! -f "$PROJECT_DIR/url-download-server.js" ]; then
-    alert "Can't find the Downloader project folder:\n$PROJECT_DIR\n\nRun create-app.sh again from the project folder."
+    alert "Can't find the Siphon project folder:\n$PROJECT_DIR\n\nRun create-app.sh again from the project folder."
     exit 1
 fi
 cd "$PROJECT_DIR" || exit 1
@@ -112,7 +114,7 @@ if ! command -v yt-dlp &>/dev/null; then
 fi
 
 if [ ! -d "node_modules" ]; then
-    osascript -e 'display notification "Installing dependencies..." with title "Downloader"'
+    osascript -e 'display notification "Installing dependencies..." with title "Siphon"'
     NPM_PATH=$(command -v npm 2>/dev/null)
     [ -z "$NPM_PATH" ] && NPM_PATH="$(dirname "$NODE_PATH")/npm"
     if ! "$NPM_PATH" install > "$LOG_DIR/npm-install.log" 2>&1; then
@@ -121,7 +123,7 @@ if [ ! -d "node_modules" ]; then
     fi
 fi
 
-osascript -e 'display notification "Starting server..." with title "Downloader"'
+osascript -e 'display notification "Starting server..." with title "Siphon"'
 "$NODE_PATH" url-download-server.js > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
@@ -147,9 +149,9 @@ open "$URL"
 
 wait $SERVER_PID
 EOF
-} > "${MACOS_DIR}/Downloader"
+} > "${MACOS_DIR}/${APP_NAME}"
 
-chmod +x "${MACOS_DIR}/Downloader"
+chmod +x "${MACOS_DIR}/${APP_NAME}"
 
 # Install (a running launcher keeps working; macOS holds the old file open)
 if [ -d "$INSTALL_PATH" ] && [ "$(defaults read "$INSTALL_PATH/Contents/Info" CFBundleIdentifier 2>/dev/null)" != "$BUNDLE_ID" ]; then
@@ -179,7 +181,7 @@ trash_copy() {
 }
 
 {
-    for name in "$APP_NAME" "URL Downloader"; do
+    for name in "$APP_NAME" "${OLD_NAMES[@]}"; do
         for parent in "$SCRIPT_DIR" /Applications "$HOME/Applications" "$HOME/Desktop" "$HOME/Downloads" /Volumes/*/WebstormProjects/* /Volumes/*/WebStormProjects/*; do
             echo "${parent}/${name}.app"
         done
