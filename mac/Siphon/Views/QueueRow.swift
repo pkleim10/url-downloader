@@ -27,6 +27,12 @@ struct QueueRow: View {
                     progress
                         .padding(.top, 2)
                 }
+                if let note = item.note {
+                    Label(note, systemImage: "wand.and.stars")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.accent)
+                        .lineLimit(1)
+                }
                 if item.status == .failed, let reason = item.failReason {
                     Text(reason)
                         .font(.system(size: 11))

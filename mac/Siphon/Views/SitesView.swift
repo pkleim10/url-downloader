@@ -1,6 +1,7 @@
+import AppKit
 import SwiftUI
 
-/// Read-only view of `sites/sites.json`: how each site is handled and when it was last tested.
+/// Read-only view of the persistent `sites.json`: how each site is handled and when it was last tested.
 struct SitesView: View {
     let queue: DownloadQueue
 
@@ -27,7 +28,15 @@ struct SitesView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Sites without an entry use yt-dlp's built-in support.")
+            HStack {
+                Text("Sites Siphon hasn't seen are tested on first download and added here.")
+                Spacer()
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([queue.sitesFolder.appendingPathComponent("sites.json")])
+                }
+                .controlSize(.small)
+            }
+            Text("Sites: \(queue.sitesFolder.path)")
             if let ytDlp = queue.ytDlpPath {
                 Text("yt-dlp: \(ytDlp.path)")
             }
@@ -71,6 +80,14 @@ private struct SiteRow: View {
         } label: {
             HStack {
                 Text(site.name).font(.body.weight(.medium))
+                if site.isLearned {
+                    Text("Learned")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Theme.accent.opacity(0.12), in: Capsule())
+                }
                 Spacer()
                 Text(site.status.capitalized)
                     .font(.caption.weight(.semibold))

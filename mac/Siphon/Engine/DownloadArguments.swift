@@ -36,6 +36,7 @@ enum DownloadArguments {
     static let progressPrefix = "SIPHON-PROGRESS "
     static let titlePrefix = "SIPHON-TITLE "
     static let filePrefix = "SIPHON-FILE "
+    static let extractorPrefix = "SIPHON-EXTRACTOR "
 
     /// Same rule as the web server: letters, digits, space, underscore and hyphen only.
     static func sanitizePrefix(_ prefix: String) -> String {
@@ -56,7 +57,7 @@ enum DownloadArguments {
         url: String,
         prefix: String,
         destination: URL,
-        site: SiteConfig?,
+        siteArguments: [String],
         pluginDirectory: URL?,
         quality: QualityPreset
     ) -> [String] {
@@ -64,7 +65,7 @@ enum DownloadArguments {
         if let pluginDirectory {
             args += ["--plugin-dirs", pluginDirectory.path]
         }
-        args += site?.ytDlpArgs ?? []
+        args += siteArguments
         args += quality.formatArguments
         args += [
             "--no-update",
@@ -72,6 +73,7 @@ enum DownloadArguments {
             "--progress-template",
             "download:\(progressPrefix)%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(progress.fragment_index)s|%(progress.fragment_count)s",
             "--print", "before_dl:\(titlePrefix)%(title)s",
+            "--print", "before_dl:\(extractorPrefix)%(extractor_key)s",
             "--print", "after_move:\(filePrefix)%(filepath)s",
             "-o", outputTemplate(destination: destination, prefix: prefix),
             "--", url,

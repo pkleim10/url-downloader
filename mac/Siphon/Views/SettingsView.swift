@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.destination) private var destinationPath = ""
     @AppStorage(SettingsKey.maxConcurrent) private var maxConcurrent = AppSettings.defaultMaxConcurrent
     @AppStorage(SettingsKey.quality) private var quality = QualityPreset.configFile
+    @AppStorage(SettingsKey.learnSites) private var learnSites = true
 
     var body: some View {
         Form {
@@ -27,6 +28,10 @@ struct SettingsView: View {
                 ForEach(QualityPreset.allCases) { preset in
                     Text(preset.label).tag(preset)
                 }
+            }
+            Toggle(isOn: $learnSites) {
+                Text("Learn new sites")
+                Text("Siphon tests sites it doesn't know yet, tries automatic fixes when they fail, and records the result in Sites with one example link. Stored only on this Mac.")
             }
             LabeledContent("yt-dlp") {
                 Text(queue.ytDlpPath?.path ?? "Not found")

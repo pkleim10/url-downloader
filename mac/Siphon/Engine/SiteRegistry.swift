@@ -13,10 +13,31 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     var lastTested: String?
     var testResult: String?
     var notes: String?
+    /// "learned" for entries Siphon recorded itself; nil for entries shipped in the repo.
+    var source: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, match, method, status, ytDlpArgs, plugin, exampleUrl, lastTested, testResult, notes
+        case id, name, match, method, status, ytDlpArgs, plugin, exampleUrl, lastTested, testResult, notes, source
     }
+
+    init(id: String, name: String, match: [String], method: String, status: String,
+         ytDlpArgs: [String] = [], plugin: String? = nil, exampleUrl: String? = nil,
+         lastTested: String? = nil, testResult: String? = nil, notes: String? = nil, source: String? = nil) {
+        self.id = id
+        self.name = name
+        self.match = match
+        self.method = method
+        self.status = status
+        self.ytDlpArgs = ytDlpArgs
+        self.plugin = plugin
+        self.exampleUrl = exampleUrl
+        self.lastTested = lastTested
+        self.testResult = testResult
+        self.notes = notes
+        self.source = source
+    }
+
+    var isLearned: Bool { source == "learned" }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -31,6 +52,11 @@ struct SiteConfig: Codable, Identifiable, Equatable {
         lastTested = try c.decodeIfPresent(String.self, forKey: .lastTested)
         testResult = try c.decodeIfPresent(String.self, forKey: .testResult)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
+        source = try c.decodeIfPresent(String.self, forKey: .source)
+    }
+
+    func overlaps(_ other: SiteConfig) -> Bool {
+        id == other.id || match.contains { other.matches(host: $0) } || other.match.contains { matches(host: $0) }
     }
 
     /// True when `host` is one of the `match` domains or a subdomain of one.

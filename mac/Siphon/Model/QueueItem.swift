@@ -32,6 +32,8 @@ struct QueueItem: Identifiable, Codable, Equatable {
     var totalBytes: Int64?
     var speed: Double?
     var eta: Int?
+    /// What Siphon is doing about the site, e.g. "Trying fix 2 of 3"; not saved.
+    var note: String?
 
     enum CodingKeys: String, CodingKey {
         case id, url, prefix, destination, status, addedAt, title, siteName, failReason, filePath

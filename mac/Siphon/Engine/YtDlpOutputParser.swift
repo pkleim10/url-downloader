@@ -27,6 +27,7 @@ enum YtDlpEvent: Equatable {
     case title(String)
     case progress(DownloadProgress)
     case file(String)
+    case extractor(String)
     case output(String)
 }
 
@@ -58,6 +59,9 @@ enum YtDlpOutputParser {
         }
         if line.hasPrefix(DownloadArguments.filePrefix) {
             return .file(String(line.dropFirst(DownloadArguments.filePrefix.count)))
+        }
+        if line.hasPrefix(DownloadArguments.extractorPrefix) {
+            return .extractor(String(line.dropFirst(DownloadArguments.extractorPrefix.count)))
         }
         return .output(line)
     }

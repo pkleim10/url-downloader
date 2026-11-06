@@ -65,7 +65,7 @@ struct DownloadArgumentsTests {
             url: "https://x.com/v/1",
             prefix: "",
             destination: destination,
-            site: site,
+            siteArguments: site.ytDlpArgs,
             pluginDirectory: URL(fileURLWithPath: "/tmp/plugins"),
             quality: .p1080
         )
@@ -79,7 +79,7 @@ struct DownloadArgumentsTests {
     @Test func configFileQualityAddsNoFormat() {
         let args = DownloadArguments.build(
             url: "https://y.com/1", prefix: "", destination: destination,
-            site: nil, pluginDirectory: nil, quality: .configFile
+            siteArguments: [], pluginDirectory: nil, quality: .configFile
         )
         #expect(!args.contains("-f"))
         #expect(!args.contains("--plugin-dirs"))

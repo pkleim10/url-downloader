@@ -14,3 +14,9 @@ When given a URL, establish success yourself:
 3. If it fails, fix in this order: update yt-dlp, per-site options (`ytDlpArgs`), the user's browser cookies (ask first), then a plugin in `sites/plugins/yt_dlp_plugins/extractor/`.
 4. Record the entry: `method` (`builtin` | `options` | `plugin` | `unsupported`), `status` (`working` | `broken` | `unsupported` | `untested`), `lastTested`, `testResult` (what the check showed), `notes` (why it failed and why the fix works), `exampleUrl`.
 5. Do not circumvent DRM; mark such sites `unsupported` and say why.
+
+## The app's persistent copy
+
+- The native app keeps its own copy at `~/Library/Application Support/Siphon/sites/` (`sites.json` + `plugins/`), seeded from the bundled repo copy and merged on every launch: a repo entry replaces the entries it overlaps unless one of them has a later `lastTested`.
+- When a link's site has no entry, the app tests it during the real download, tries automatic fixes (browser impersonation, referer, generic page scan), checks the file with `ffprobe`, and records the result with `"source": "learned"`.
+- Learned `broken` entries are the work list: fix them with the steps above (plugins and cookies are beyond the app), then record the fix in the repo's `sites/sites.json` with a newer `lastTested` so it wins the merge. Promote useful learned `working` entries the same way.

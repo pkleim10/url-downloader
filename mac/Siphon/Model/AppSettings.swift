@@ -4,6 +4,7 @@ enum SettingsKey {
     static let destination = "destinationPath"
     static let maxConcurrent = "maxConcurrentDownloads"
     static let quality = "qualityPreset"
+    static let learnSites = "learnSites"
 }
 
 enum AppSettings {
@@ -26,5 +27,9 @@ enum AppSettings {
 
     static var quality: QualityPreset {
         UserDefaults.standard.string(forKey: SettingsKey.quality).flatMap(QualityPreset.init(rawValue:)) ?? .configFile
+    }
+
+    static var learnSites: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.learnSites) as? Bool ?? true
     }
 }

@@ -14,11 +14,28 @@ final class DownloadQueue {
     /// or two yt-dlp processes would write the same partial file.
     @ObservationIgnored private var stopping: [UUID: DownloadProcess] = [:]
     @ObservationIgnored private let store: QueueStore
+    @ObservationIgnored private let siteStore: SiteStore
+    @ObservationIgnored private let bundledSites: URL?
+    /// Items whose site is being tested: which attempts remain and what failed so far.
+    @ObservationIgnored private var learning: [UUID: LearningState] = [:]
+
+    private struct LearningState {
+        var attempts: [SiteLearner.Attempt]
+        var index = 0
+        var existing: SiteConfig?
+        var extractor: String?
+        var firstFailure: String?
+
+        var current: SiteLearner.Attempt { attempts[index] }
+    }
 
     init(store: QueueStore = QueueStore(fileURL: QueueStore.defaultFileURL),
-         sites: SiteRegistry = .load(from: SiteRegistry.bundledFolder)) {
+         siteStore: SiteStore = SiteStore(folder: SiteStore.defaultFolder),
+         bundledSites: URL? = SiteRegistry.bundledFolder) {
         self.store = store
-        self.sites = sites
+        self.siteStore = siteStore
+        self.bundledSites = bundledSites
+        sites = siteStore.prepare(bundled: bundledSites)
         items = store.load()
         ytDlpPath = YtDlpLocator.ytDlp
         scheduleDownloads()
@@ -79,6 +96,7 @@ final class DownloadQueue {
         guard let i = index(of: id), items[i].status == .failed else { return }
         items[i].status = .pending
         items[i].failReason = nil
+        items[i].note = nil
         items[i].clearProgress()
         save()
         scheduleDownloads()
@@ -86,6 +104,7 @@ final class DownloadQueue {
 
     func remove(_ id: UUID) {
         stopProcess(id)
+        learning[id] = nil
         items.removeAll { $0.id == id }
         save()
         scheduleDownloads()
@@ -124,6 +143,7 @@ final class DownloadQueue {
 
     func clearAll() {
         for id in Array(processes.keys) { stopProcess(id) }
+        learning.removeAll()
         items.removeAll()
         save()
         updateDockBadge()
@@ -136,9 +156,11 @@ final class DownloadQueue {
     }
 
     func reloadSites() {
-        sites = .load(from: SiteRegistry.bundledFolder)
+        sites = siteStore.prepare(bundled: bundledSites)
         ytDlpPath = YtDlpLocator.ytDlp
     }
+
+    var sitesFolder: URL { siteStore.folder }
 
     // MARK: - Scheduling
 
@@ -159,13 +181,17 @@ final class DownloadQueue {
 
         let item = items[i]
         let site = sites.site(for: item.url)
+        if learning[id] == nil, AppSettings.learnSites, SiteLearner.shouldLearn(site) {
+            learning[id] = LearningState(attempts: SiteLearner.attempts(for: item.url, existing: site), existing: site)
+        }
+        let siteArguments = learning[id]?.current.arguments ?? site?.ytDlpArgs ?? []
         let destination = URL(fileURLWithPath: item.destination, isDirectory: true)
         try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let arguments = DownloadArguments.build(
             url: item.url,
             prefix: item.prefix,
             destination: destination,
-            site: site,
+            siteArguments: siteArguments,
             pluginDirectory: sites.pluginDirectory,
             quality: AppSettings.quality
         )
@@ -181,6 +207,13 @@ final class DownloadQueue {
         items[i].siteName = site?.name
         items[i].failReason = nil
         items[i].clearProgress()
+        if let state = learning[id] {
+            items[i].note = state.index == 0
+                ? (site == nil ? "New site: testing" : "Retesting site")
+                : "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
+        } else {
+            items[i].note = nil
+        }
         processes[id] = process
         do {
             try process.start()
@@ -204,6 +237,8 @@ final class DownloadQueue {
             if let fraction = progress.fraction { items[i].fraction = fraction }
         case .file(let path):
             items[i].filePath = path
+        case .extractor(let name):
+            learning[id]?.extractor = name
         case .output:
             break
         }
@@ -219,12 +254,82 @@ final class DownloadQueue {
             items[i].fraction = 1
             items[i].speed = nil
             items[i].eta = nil
+            if let state = learning.removeValue(forKey: id) {
+                items[i].note = "Checking the file…"
+                recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state)
+            }
         } else {
+            let reason = YtDlpOutputParser.failureReason(from: lines, exitCode: exitCode)
+            if var state = learning[id] {
+                let kind = SiteLearner.classify(reason)
+                if state.firstFailure == nil { state.firstFailure = reason }
+                if kind == .site, state.index + 1 < state.attempts.count {
+                    state.index += 1
+                    learning[id] = state
+                    items[i].status = .pending
+                    items[i].note = "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
+                    items[i].clearProgress()
+                    save()
+                    return
+                }
+                learning[id] = nil
+                if kind == .site || kind == .drm,
+                   let entry = SiteLearner.failedEntry(
+                       url: items[i].url, kind: kind, tried: Array(state.attempts[...state.index]),
+                       firstFailure: state.firstFailure, lastFailure: reason, existing: state.existing) {
+                    recordSite(entry)
+                    items[i].note = kind == .drm ? "Recorded in Sites as unsupported (DRM)" : "Recorded in Sites as broken"
+                } else {
+                    items[i].note = nil
+                }
+            }
             items[i].status = .failed
-            items[i].failReason = YtDlpOutputParser.failureReason(from: lines, exitCode: exitCode)
+            items[i].failReason = reason
             items[i].clearProgress()
         }
         save()
+    }
+
+    // MARK: - Learning sites
+
+    private func recordSuccess(_ id: UUID, url: String, path: String?, state: LearningState) {
+        Task { [weak self] in
+            let check = await MediaProbe.check(path: path)
+            guard let self else { return }
+            let i = self.index(of: id)
+            if check.playable {
+                if let entry = SiteLearner.workingEntry(
+                    url: url, attempt: state.current, extractor: state.extractor,
+                    firstFailure: state.firstFailure, testResult: check.summary, existing: state.existing) {
+                    self.recordSite(entry)
+                }
+                if let i { self.items[i].note = state.existing == nil ? "Added to Sites" : "Sites entry updated" }
+            } else {
+                if let entry = SiteLearner.failedEntry(
+                    url: url, kind: .site, tried: [state.current], firstFailure: state.firstFailure,
+                    lastFailure: check.summary, existing: state.existing) {
+                    self.recordSite(entry)
+                }
+                if let i {
+                    self.items[i].status = .failed
+                    self.items[i].failReason = check.summary
+                    self.items[i].note = "Recorded in Sites as broken"
+                }
+            }
+            self.save()
+        }
+    }
+
+    /// Replaces any learned entry for the same domain; curated entries are never touched.
+    private func recordSite(_ entry: SiteConfig) {
+        var all = siteStore.load()
+        all.removeAll { $0.isLearned && $0.overlaps(entry) }
+        all.append(entry)
+        siteStore.save(all)
+        sites = .load(from: siteStore.folder)
+        for i in items.indices where items[i].siteName == nil && sites.site(for: items[i].url)?.id == entry.id {
+            items[i].siteName = entry.name
+        }
     }
 
     private func stopProcess(_ id: UUID) {
