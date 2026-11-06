@@ -38,7 +38,7 @@ struct SiteStoreTests {
         let root = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("siphon-sitestore-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
         let bundled = root.appendingPathComponent("bundled")
-        let pluginFile = bundled.appendingPathComponent("plugins/yt_dlp_plugins/extractor/demo.py")
+        let pluginFile = bundled.appendingPathComponent("plugins/siphon/yt_dlp_plugins/extractor/demo.py")
         try FileManager.default.createDirectory(at: pluginFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("# demo".utf8).write(to: pluginFile)
         try Data(#"{"sites":[{"id":"a","match":["a.com"],"lastTested":"2026-11-01"}]}"#.utf8)
@@ -47,7 +47,7 @@ struct SiteStoreTests {
         let store = SiteStore(folder: root.appendingPathComponent("user"))
         let registry = store.prepare(bundled: bundled)
         #expect(registry.sites.map(\.id) == ["a"])
-        #expect(FileManager.default.fileExists(atPath: store.pluginsURL.appendingPathComponent("yt_dlp_plugins/extractor/demo.py").path))
+        #expect(FileManager.default.fileExists(atPath: store.pluginsURL.appendingPathComponent("siphon/yt_dlp_plugins/extractor/demo.py").path))
 
         store.save(registry.sites + [site("learned", "l.com", tested: "2026-11-06", learned: true)])
         #expect(store.prepare(bundled: bundled).sites.map(\.id) == ["a", "learned"])

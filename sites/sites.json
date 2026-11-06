@@ -12,6 +12,19 @@
       "lastTested": "2026-11-05",
       "testResult": "Downloaded the full file (5.6 MB): H.264 768x432, 24 fps, 29.8 s. Every frame decoded cleanly.",
       "notes": "The link points straight at an MP4 file on iStock's media server (200 OK, video/mp4, resumable), so yt-dlp's generic downloader handles it with no extra options. The file name comes from the URL path. These are iStock's watermarked preview copies; the licensed full-resolution clip is not available this way."
+    },
+    {
+      "id": "puncher-tube",
+      "name": "Puncher.tube",
+      "match": ["puncher.tube"],
+      "method": "plugin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": "siphon/yt_dlp_plugins/extractor/puncher_tube.py",
+      "exampleUrl": "https://puncher.tube/video/1185159/angelbabyluuv-glad-you-came-by-tonight.html",
+      "lastTested": "2026-11-06",
+      "testResult": "Downloaded the full video through the plugin (74.8 MB): H.264 1280x720 with AAC audio, 7:21. Every frame decoded cleanly.",
+      "notes": "yt-dlp has no puncher.tube extractor, and the generic extractor reports Unsupported URL: the page (behind Cloudflare, but served normally to yt-dlp) has no video of its own, only an iframe to an embed on another host (x-x-x.tube/embed/<id>/). The generic extractor doesn't follow arbitrary iframes, and none of Siphon's automatic fixes change that. The embed is a KVS player, which the generic extractor does handle with no cookies or referer, so the plugin reads the iframe in the page's player box and hands the embed URL to the generic extractor. The title comes from the embed (the page's og:title carries site boilerplate)."
     }
   ]
 }
