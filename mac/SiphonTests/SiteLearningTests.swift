@@ -123,6 +123,20 @@ struct SiteLearnerTests {
         #expect(entry.notes?.contains("x-x-x.tube") == true)
     }
 
+    @Test func sitesWindowSortsByNameAndSearches() {
+        func site(_ name: String, _ domain: String, status: String = "working") -> SiteConfig {
+            SiteConfig(id: domain, name: name, match: [domain], method: "builtin", status: status)
+        }
+        let sites = [site("txxx.com", "txxx.com"), site("aShemaleTube", "ashemaletube.com"),
+                     site("iStock preview videos", "media.istockphoto.com"), site("eporner.com", "eporner.com", status: "broken")]
+        #expect(SitesView.visible(sites, matching: "").map(\.name)
+                == ["aShemaleTube", "eporner.com", "iStock preview videos", "txxx.com"])
+        #expect(SitesView.visible(sites, matching: "istockphoto").map(\.name) == ["iStock preview videos"])
+        #expect(SitesView.visible(sites, matching: "BROKEN").map(\.name) == ["eporner.com"])
+        #expect(SitesView.visible(sites, matching: "builtin com").count == 4)
+        #expect(SitesView.visible(sites, matching: "nothing").isEmpty)
+    }
+
     @Test func classifiesFailures() {
         #expect(SiteLearner.classify("Unable to download webpage: <urlopen error [Errno 8] nodename nor servname provided>") == .local)
         #expect(SiteLearner.classify("This video is DRM protected") == .drm)

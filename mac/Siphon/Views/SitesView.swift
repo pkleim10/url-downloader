@@ -4,8 +4,10 @@ import SwiftUI
 /// Read-only view of the persistent `sites.json`: how each site is handled and when it was last tested.
 struct SitesView: View {
     let queue: DownloadQueue
+    @State private var query = ""
 
     var body: some View {
+        let shown = Self.visible(queue.sites.sites, matching: query)
         VStack(alignment: .leading, spacing: 0) {
             if queue.sites.sites.isEmpty {
                 ContentUnavailableView(
@@ -14,8 +16,11 @@ struct SitesView: View {
                     description: Text("Sites without an entry use yt-dlp's built-in support.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if shown.isEmpty {
+                ContentUnavailableView.search(text: query)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(queue.sites.sites) { site in
+                List(shown) { site in
                     SiteRow(site: site, pluginSource: queue.sites.pluginSource(for: site))
                 }
                 .listStyle(.inset)
@@ -23,7 +28,19 @@ struct SitesView: View {
             Divider()
             footer
         }
+        .searchable(text: $query, placement: .toolbar, prompt: "Search sites")
         .frame(minWidth: 480, minHeight: 320)
+    }
+
+    /// Sites sorted by name, filtered to those whose name, domains, method or status contain every word of `query`.
+    static func visible(_ sites: [SiteConfig], matching query: String) -> [SiteConfig] {
+        let words = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        return sites
+            .filter { site in
+                let text = ([site.name, site.method, site.status] + site.match).joined(separator: " ").lowercased()
+                return words.allSatisfy(text.contains)
+            }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     private var footer: some View {
