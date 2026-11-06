@@ -17,27 +17,37 @@
       "id": "puncher-tube",
       "name": "Puncher.tube",
       "match": ["puncher.tube"],
-      "method": "plugin",
+      "method": "recipe",
       "status": "working",
       "ytDlpArgs": [],
-      "plugin": "siphon/yt_dlp_plugins/extractor/puncher_tube.py",
+      "plugin": null,
+      "recipe": {
+        "embed": { "match": "x-x-x\\.tube/embed/" },
+        "media": "ytdlp"
+      },
       "exampleUrl": "https://puncher.tube/video/1185159/angelbabyluuv-glad-you-came-by-tonight.html",
       "lastTested": "2026-11-06",
-      "testResult": "Downloaded the full video through the plugin (74.8 MB): H.264 1280x720 with AAC audio, 7:21. Every frame decoded cleanly.",
-      "notes": "yt-dlp has no puncher.tube extractor, and the generic extractor reports Unsupported URL: the page (behind Cloudflare, but served normally to yt-dlp) has no video of its own, only an iframe to an embed on another host (x-x-x.tube/embed/<id>/). The generic extractor doesn't follow arbitrary iframes, and none of Siphon's automatic fixes change that. The embed is a KVS player, which the generic extractor does handle with no cookies or referer, so the plugin reads the iframe in the page's player box and hands the embed URL to the generic extractor. The title comes from the embed (the page's og:title carries site boilerplate)."
+      "testResult": "Recipe found https://x-x-x.tube/embed/270856/; downloaded the full video through it (74.8 MB): H.264 1280x720 at 25 fps with AAC audio, 7:21. Every frame decoded cleanly.",
+      "notes": "yt-dlp has no puncher.tube extractor, and the generic extractor reports Unsupported URL: the page (behind Cloudflare, but served normally) has no video of its own, only an iframe to an embed on another host (x-x-x.tube/embed/<id>/). The generic extractor doesn't follow arbitrary iframes. The embed is a KVS player, which the generic extractor handles with no cookies, so the recipe finds the x-x-x.tube iframe and hands its URL to yt-dlp with the page as referer. The title comes from the embed (the page's og:title carries site boilerplate). This replaced a Python plugin, archived in sites/plugins-archive."
     },
     {
       "id": "hqporner-com",
       "name": "HQporner",
       "match": ["hqporner.com", "mydaddy.cc"],
-      "method": "plugin",
+      "method": "recipe",
       "status": "working",
       "ytDlpArgs": [],
-      "plugin": "siphon/yt_dlp_plugins/extractor/hqporner.py",
+      "plugin": null,
+      "recipe": {
+        "embed": { "match": "mydaddy\\.cc/video/", "referer": true },
+        "unescape": true,
+        "media": "sources",
+        "title": "<title>([^<]+?)\\s*-\\s*HQporner"
+      },
       "exampleUrl": "https://hqporner.com/hdporn/128512-wide_and_wet.html",
       "lastTested": "2026-11-06",
-      "testResult": "Plugin lists one video with 360p, 720p60 and 1080p60 formats and picks 1080p60. Downloaded a 30-second 1080p sample (the full file is 3.2 GB): H.264 1920x1080 at ~60 fps with AAC audio; every frame decoded cleanly. Title: \"Wide And Wet\".",
-      "notes": "yt-dlp has no hqporner extractor and the generic extractor reports Unsupported URL: the page iframes a player from mydaddy.cc. Followed directly, that embed fails two ways: it returns an empty page without an hqporner referer, and it writes its <video> tag from a JavaScript string with every quote escaped, so yt-dlp's generic HTML5 parser sees each quality as a separate video with a garbled extension (mp4\\\") that it refuses to download. Siphon's automatic fixes, including following the embedded player, all fail for that reason. The plugin's HQPornerIE reads the iframe and the page title; MyDaddyIE fetches the embed with the hqporner referer, unescapes the markup, and returns the <source> qualities as formats of one video. The video files themselves need no referer or cookies."
+      "testResult": "Recipe found the mydaddy.cc player, read its 360p, 720p60 and 1080p60 sources, and picked 1080.mp4 on bigcdn.cc. Downloaded a 30-second sample of it as \"Wide And Wet [128512-wide_and_wet].mp4\": H.264 1920x1080 at ~60 fps with AAC audio; every frame decoded cleanly.",
+      "notes": "yt-dlp has no hqporner extractor and the generic extractor reports Unsupported URL: the page iframes a player from mydaddy.cc. Followed directly, that embed fails two ways: it returns an empty page without an hqporner referer, and it writes its <video> tag from a JavaScript string with every quote escaped, so yt-dlp's generic HTML5 parser sees each quality as a separate video with a garbled extension (mp4\\\") that it refuses to download. The recipe finds the mydaddy.cc iframe, fetches it with the page as referer, undoes the escaping, reads the <source> qualities (360p, 720p60, 1080p60), picks the tallest that fits the Quality setting, and gives yt-dlp that MP4 with the page title (\"Wide And Wet\") and the page's id. The video files need no referer or cookies. This replaced a Python plugin, archived in sites/plugins-archive."
     }
   ]
 }

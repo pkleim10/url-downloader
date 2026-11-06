@@ -75,26 +75,45 @@ struct SiteLearnerTests {
     @Test func attemptsStartPlainThenFixesWithoutDuplicates() {
         let plain = SiteLearner.attempts(for: "https://example.com/v/1", existing: nil)
         #expect(plain.first?.arguments == [])
-        #expect(plain.count == 5)
+        #expect(plain.count == 6)
         #expect(plain[2].arguments.contains("Referer:https://example.com/"))
-        #expect(plain.last?.followEmbed == true)
-        #expect(plain.dropLast().allSatisfy { !$0.followEmbed })
+        #expect(plain[4].recipe == .followEmbed)
+        #expect(plain[5].recipe == .smartScan)
+        #expect(plain.prefix(4).allSatisfy { $0.recipe == nil })
 
         let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "options", status: "working",
                                ytDlpArgs: ["--impersonate", "chrome"], source: "learned")
         let again = SiteLearner.attempts(for: "https://example.com/v/1", existing: saved)
         #expect(again.first?.arguments == ["--impersonate", "chrome"])
-        #expect(again.count == 5)
+        #expect(again.count == 6)
 
         let embedSite = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "embed", status: "working",
                                    source: "learned", followEmbed: true)
         let embedFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: embedSite)
         #expect(embedFirst.first?.followEmbed == true)
-        #expect(embedFirst.count == 5)
+        #expect(embedFirst.count == 6)
+
+        let recipeSite = SiteConfig(id: "r", name: "r", match: ["example.com"], method: "recipe", status: "broken",
+                                    recipe: Recipe(embed: .init(match: "player\\.example"), media: .sources))
+        let recipeFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: recipeSite)
+        #expect(recipeFirst.first?.recipe?.embed?.match == "player\\.example")
+        #expect(recipeFirst.count == 7)
+    }
+
+    @Test func smartScanEntryRecordsRecipe() throws {
+        let attempt = SiteLearner.Attempt(label: "reading video sources", arguments: [], recipe: .smartScan)
+        let entry = try #require(SiteLearner.workingEntry(
+            url: "https://hqporner.com/hdporn/1-x.html", attempt: attempt, extractor: "Generic",
+            firstFailure: "Unsupported URL", testResult: "Downloaded", existing: nil,
+            embedURL: URL(string: "https://mydaddy.cc/video/abc/")))
+        #expect(entry.method == "recipe")
+        #expect(entry.recipe == .smartScan)
+        #expect(entry.followEmbed == nil)
+        #expect(entry.notes?.contains("mydaddy.cc") == true)
     }
 
     @Test func embedEntryRecordsFollowEmbed() throws {
-        let attempt = SiteLearner.Attempt(label: "following the page's embedded player", arguments: [], followEmbed: true)
+        let attempt = SiteLearner.Attempt(label: "following the page's embedded player", arguments: [], recipe: .followEmbed)
         let entry = try #require(SiteLearner.workingEntry(
             url: "https://puncher.tube/video/1/x.html", attempt: attempt, extractor: "Generic",
             firstFailure: "Unsupported URL", testResult: "Downloaded 74.8 MB", existing: nil,

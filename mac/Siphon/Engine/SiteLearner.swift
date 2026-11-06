@@ -6,8 +6,10 @@ enum SiteLearner {
     struct Attempt: Equatable {
         let label: String
         let arguments: [String]
-        /// Download the player iframe the page embeds instead of the page (see `EmbedFinder`).
-        var followEmbed = false
+        /// Run a recipe to find the URL for yt-dlp instead of giving it the page.
+        var recipe: Recipe?
+
+        var followEmbed: Bool { recipe == .followEmbed }
     }
 
     enum FailureKind: Equatable {
@@ -40,8 +42,8 @@ enum SiteLearner {
     static func attempts(for url: String, existing: SiteConfig?) -> [Attempt] {
         let origin = URL(string: url).flatMap { u in u.scheme.flatMap { s in u.host.map { "\(s)://\($0)" } } } ?? ""
         var list: [Attempt] = []
-        if let existing, existing.followEmbed == true {
-            list.append(Attempt(label: "following the page's embedded player", arguments: existing.ytDlpArgs, followEmbed: true))
+        if let existing, let recipe = existing.effectiveRecipe {
+            list.append(Attempt(label: "the saved recipe", arguments: existing.ytDlpArgs, recipe: recipe))
         } else if let existing, !existing.ytDlpArgs.isEmpty {
             list.append(Attempt(label: "saved options", arguments: existing.ytDlpArgs))
         }
@@ -51,10 +53,14 @@ enum SiteLearner {
             Attempt(label: "browser impersonation with the site as referer",
                     arguments: ["--impersonate", "chrome", "--add-headers", "Referer:\(origin)/"]),
             Attempt(label: "scanning the page for media", arguments: ["--use-extractors", "generic", "--impersonate", "chrome"]),
-            Attempt(label: "following the page's embedded player", arguments: [], followEmbed: true),
+            Attempt(label: "following the page's embedded player", arguments: [], recipe: .followEmbed),
+            Attempt(label: "reading video sources from the embedded player", arguments: [], recipe: .smartScan),
         ]
-        var seen = Set<String>()
-        return list.filter { seen.insert("\($0.followEmbed)|\($0.arguments.joined(separator: "\u{1F}"))").inserted }
+        var kept: [Attempt] = []
+        for attempt in list where !kept.contains(where: { $0.recipe == attempt.recipe && $0.arguments == attempt.arguments }) {
+            kept.append(attempt)
+        }
+        return kept
     }
 
     static func classify(_ reason: String) -> FailureKind {
@@ -89,8 +95,12 @@ enum SiteLearner {
         let handler = extractor.map { "yt-dlp's \($0) extractor" } ?? "yt-dlp"
         let notes: String
         if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments,
-           (existing.followEmbed == true) == attempt.followEmbed, let kept = existing.notes {
+           existing.effectiveRecipe == attempt.recipe, let kept = existing.notes {
             notes = kept
+        } else if attempt.recipe == .smartScan {
+            let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
+            let host = embedURL?.host.map { " from \($0)" } ?? ""
+            notes = "Learned by Siphon: \(before)The page embeds a player\(host) that yt-dlp can't read directly. Siphon reads the player's video sources itself (undoing JavaScript escaping), picks the quality that fits the Quality setting, and gives yt-dlp that file."
         } else if attempt.followEmbed {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             let host = embedURL?.host.map { " from \($0)" } ?? ""
@@ -103,10 +113,13 @@ enum SiteLearner {
         }
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: attempt.followEmbed ? "embed" : attempt.arguments.isEmpty ? "builtin" : "options", status: "working",
+            method: attempt.followEmbed ? "embed" : attempt.recipe != nil ? "recipe"
+                : attempt.arguments.isEmpty ? "builtin" : "options",
+            status: "working",
             ytDlpArgs: attempt.arguments, exampleUrl: existing?.exampleUrl ?? url,
             lastTested: today(date), testResult: testResult, notes: notes, source: "learned",
-            followEmbed: attempt.followEmbed ? true : nil
+            followEmbed: attempt.followEmbed ? true : nil,
+            recipe: attempt.followEmbed ? nil : attempt.recipe
         )
     }
 

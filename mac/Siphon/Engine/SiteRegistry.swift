@@ -17,17 +17,20 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     var source: String?
     /// The page only embeds another host's player in an iframe; download the iframe's URL instead.
     var followEmbed: Bool?
+    /// How Siphon finds the video itself before handing a URL to yt-dlp (see `Recipe`).
+    var recipe: Recipe?
 
     enum CodingKeys: String, CodingKey {
         case id, name, match, method, status, ytDlpArgs, plugin, exampleUrl, lastTested, testResult, notes, source
-        case followEmbed
+        case followEmbed, recipe
     }
 
     init(id: String, name: String, match: [String], method: String, status: String,
          ytDlpArgs: [String] = [], plugin: String? = nil, exampleUrl: String? = nil,
          lastTested: String? = nil, testResult: String? = nil, notes: String? = nil, source: String? = nil,
-         followEmbed: Bool? = nil) {
+         followEmbed: Bool? = nil, recipe: Recipe? = nil) {
         self.followEmbed = followEmbed
+        self.recipe = recipe
         self.id = id
         self.name = name
         self.match = match
@@ -59,6 +62,12 @@ struct SiteConfig: Codable, Identifiable, Equatable {
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
         source = try c.decodeIfPresent(String.self, forKey: .source)
         followEmbed = try c.decodeIfPresent(Bool.self, forKey: .followEmbed)
+        recipe = try? c.decodeIfPresent(Recipe.self, forKey: .recipe)
+    }
+
+    /// The recipe to run, including the older `followEmbed` flag.
+    var effectiveRecipe: Recipe? {
+        recipe ?? (followEmbed == true ? .followEmbed : nil)
     }
 
     func overlaps(_ other: SiteConfig) -> Bool {

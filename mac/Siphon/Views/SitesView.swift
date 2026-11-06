@@ -60,8 +60,8 @@ private struct SiteRow: View {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
                 detail("Matches", site.match.joined(separator: ", "))
                 detail("Method", site.method)
-                if site.followEmbed == true {
-                    detail("Embedded player", "Siphon finds the player iframe on each page and downloads that")
+                if let recipe = site.effectiveRecipe {
+                    detail("Recipe", recipe.summary)
                 }
                 detail("yt-dlp options", site.ytDlpArgs.isEmpty ? "None" : site.ytDlpArgs.joined(separator: " "))
                 if let plugin = site.plugin { detail("Plugin", plugin) }

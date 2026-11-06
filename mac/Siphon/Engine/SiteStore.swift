@@ -60,19 +60,37 @@ struct SiteStore {
         return result
     }
 
-    /// Bundled plugin files overwrite same-named copies; other plugins are left alone.
+    /// Bundled plugin files overwrite same-named copies. Files in Siphon's own `plugins/siphon/`
+    /// that the bundle no longer ships are removed; plugins anywhere else are left alone.
     private func copyPlugins(from source: URL) {
         let fm = FileManager.default
-        guard let files = fm.enumerator(at: source, includingPropertiesForKeys: [.isRegularFileKey]) else { return }
-        for case let file as URL in files {
-            guard file.pathComponents.contains("__pycache__") == false,
-                  (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
-            let relative = String(file.standardizedFileURL.path.dropFirst(source.standardizedFileURL.path.count + 1))
+        let shipped = Self.pluginFiles(in: source)
+        for relative in shipped {
+            let file = source.appendingPathComponent(relative)
             let target = pluginsURL.appendingPathComponent(relative)
             try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             if fm.contentsEqual(atPath: file.path, andPath: target.path) { continue }
             try? fm.removeItem(at: target)
             try? fm.copyItem(at: file, to: target)
         }
+        let owned = pluginsURL.appendingPathComponent("siphon", isDirectory: true)
+        for relative in Self.pluginFiles(in: owned) where !shipped.contains("siphon/" + relative) {
+            try? fm.removeItem(at: owned.appendingPathComponent(relative))
+        }
+        try? fm.removeItem(at: owned.appendingPathComponent("yt_dlp_plugins/extractor/__pycache__"))
+    }
+
+    /// Regular files below `folder`, as paths relative to it, skipping `__pycache__`.
+    static func pluginFiles(in folder: URL) -> Set<String> {
+        let fm = FileManager.default
+        let base = folder.standardizedFileURL.path
+        guard let files = fm.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
+        var result = Set<String>()
+        for case let file as URL in files {
+            guard file.pathComponents.contains("__pycache__") == false,
+                  (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            result.insert(String(file.standardizedFileURL.path.dropFirst(base.count + 1)))
+        }
+        return result
     }
 }

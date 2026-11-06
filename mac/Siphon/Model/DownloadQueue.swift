@@ -257,7 +257,7 @@ final class DownloadQueue {
             learning[id] = LearningState(attempts: SiteLearner.attempts(for: item.url, existing: site), existing: site)
         }
         let siteArguments = learning[id]?.current.arguments ?? site?.ytDlpArgs ?? []
-        let followEmbed = learning[id]?.current.followEmbed ?? (site?.followEmbed == true)
+        let recipe = learning[id].map { $0.current.recipe } ?? site?.effectiveRecipe
 
         items[i].status = .downloading
         items[i].siteName = site?.name
@@ -275,34 +275,42 @@ final class DownloadQueue {
             appendLog(id, "--- Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)")
         }
 
-        guard followEmbed else {
+        guard let recipe else {
             launch(id, ytDlp: ytDlp, url: item.url, siteArguments: siteArguments)
             return
         }
-        let embedArguments = siteArguments + ["--add-headers", "Referer:\(item.url)"]
-        if let embed = embeds[id] {
-            launch(id, ytDlp: ytDlp, url: embed.absoluteString, siteArguments: embedArguments)
-            return
-        }
         guard let page = URL(string: item.url) else {
-            attemptFailed(id, reason: "No embedded player found on the page")
+            attemptFailed(id, reason: RecipeError.noEmbed.localizedDescription)
             return
         }
-        appendLog(id, "--- Looking for the page's embedded player")
+        appendLog(id, "--- Running the site recipe" + (recipe.media == .sources ? " (reading the player's video sources)" : ""))
         let token = UUID()
         embedLookups[id] = token
+        let quality = AppSettings.quality
         Task { [weak self] in
-            let embed = await EmbedFinder.fetchEmbed(for: page)
+            let result: Result<RecipeResolution, Error>
+            do {
+                result = .success(try await RecipeRunner.resolve(page: page, recipe: recipe, quality: quality))
+            } catch {
+                result = .failure(error)
+            }
             guard let self, self.embedLookups[id] == token else { return }
             self.embedLookups[id] = nil
             guard let i = self.index(of: id), self.items[i].status == .downloading else { return }
-            if let embed {
-                self.embeds[id] = embed
-                self.appendLog(id, "--- Found the player: \(embed.absoluteString)")
-                self.launch(id, ytDlp: ytDlp, url: embed.absoluteString, siteArguments: embedArguments)
-            } else {
-                self.appendLog(id, "--- No embedded player found on the page")
-                self.attemptFailed(id, reason: "No embedded player found on the page")
+            switch result {
+            case .success(let resolution):
+                self.embeds[id] = resolution.embedURL
+                if let embed = resolution.embedURL { self.appendLog(id, "--- Found the player: \(embed.absoluteString)") }
+                if let title = resolution.title { self.appendLog(id, "--- Title: \(title)") }
+                if recipe.media == .sources {
+                    self.appendLog(id, "--- Video: \(resolution.url.absoluteString)"
+                        + (resolution.sourceLabel.map { " (\($0))" } ?? ""))
+                }
+                self.launch(id, ytDlp: ytDlp, url: resolution.url.absoluteString,
+                            siteArguments: siteArguments + RecipeRunner.arguments(for: resolution))
+            case .failure(let error):
+                self.appendLog(id, "--- " + error.localizedDescription)
+                self.attemptFailed(id, reason: error.localizedDescription)
                 self.scheduleDownloads()
             }
         }
@@ -352,7 +360,8 @@ final class DownloadQueue {
             items[i].filePath = path
         case .extractor(let name, let videoID, let inPlaylist):
             learning[id]?.extractor = name
-            guard !inPlaylist, let videoID else { break }
+            // Generic ids are just file names, which unrelated sites reuse.
+            guard !inPlaylist, name != "Generic", let videoID else { break }
             let key = "\(name):\(videoID)"
             videoKeys[id] = key
             if items[i].allowDuplicate != true, let earlier = history.duplicate(ofVideoKey: key) {
