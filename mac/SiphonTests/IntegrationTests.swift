@@ -36,6 +36,9 @@ struct IntegrationTests {
         #expect(path.hasPrefix(scratch.path + "/test-"))
         let size = try FileManager.default.attributesOfItem(atPath: path)[.size] as? Int64
         #expect(size == 5_587_508)
+        let log = queue.logs[item.id] ?? []
+        #expect(log.first?.hasPrefix("$ ") == true && log.first?.contains("yt-dlp") == true)
+        #expect(log.last == "--- yt-dlp exited with code 0")
         if keep { print("SIPHON_FILE=\(path)") }
     }
 

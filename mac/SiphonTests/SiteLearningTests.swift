@@ -118,6 +118,15 @@ struct SiteLearnerTests {
     }
 }
 
+struct LogTests {
+    @Test @MainActor func shellQuotingOnlyQuotesWhenNeeded() {
+        #expect(DownloadQueue.shellQuoted("--newline") == "--newline")
+        #expect(DownloadQueue.shellQuoted("/tmp/Siphon Test/%(title)s.%(ext)s") == "'/tmp/Siphon Test/%(title)s.%(ext)s'")
+        #expect(DownloadQueue.shellQuoted("it's") == "'it'\\''s'")
+        #expect(DownloadQueue.shellQuoted("https://x.com/v?a=1&b=2") == "'https://x.com/v?a=1&b=2'")
+    }
+}
+
 struct MediaProbeTests {
     @Test func summarizesStreams() {
         let json = Data("""

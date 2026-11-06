@@ -8,6 +8,9 @@ final class DownloadQueue {
     private(set) var items: [QueueItem] = []
     private(set) var sites: SiteRegistry
     private(set) var ytDlpPath: URL?
+    /// The yt-dlp command and output for each item since launch, newest attempt last; not saved.
+    private(set) var logs: [UUID: [String]] = [:]
+    static let logLimit = 1000
 
     @ObservationIgnored private var processes: [UUID: DownloadProcess] = [:]
     /// Processes asked to stop that haven't exited yet; their item can't restart until they do,
@@ -105,6 +108,7 @@ final class DownloadQueue {
     func remove(_ id: UUID) {
         stopProcess(id)
         learning[id] = nil
+        logs[id] = nil
         items.removeAll { $0.id == id }
         save()
         scheduleDownloads()
@@ -137,6 +141,7 @@ final class DownloadQueue {
     }
 
     func clearCompleted() {
+        for item in items where item.status == .completed { logs[item.id] = nil }
         items.removeAll { $0.status == .completed }
         save()
     }
@@ -144,6 +149,7 @@ final class DownloadQueue {
     func clearAll() {
         for id in Array(processes.keys) { stopProcess(id) }
         learning.removeAll()
+        logs.removeAll()
         items.removeAll()
         save()
         updateDockBadge()
@@ -196,6 +202,11 @@ final class DownloadQueue {
             quality: AppSettings.quality
         )
 
+        if logs[id] != nil { appendLog(id, "") }
+        if let state = learning[id], state.index > 0 {
+            appendLog(id, "--- Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)")
+        }
+        appendLog(id, "$ " + ([ytDlp.path] + arguments).map(Self.shellQuoted).joined(separator: " "))
         let process = DownloadProcess(executable: ytDlp, arguments: arguments)
         process.onEvent = { [weak self] event in self?.handle(event, for: id) }
         process.onExit = { [weak self, weak process] code, lines in
@@ -239,8 +250,8 @@ final class DownloadQueue {
             items[i].filePath = path
         case .extractor(let name):
             learning[id]?.extractor = name
-        case .output:
-            break
+        case .output(let line):
+            appendLog(id, line)
         }
     }
 
@@ -248,6 +259,7 @@ final class DownloadQueue {
         if processes[id] === process { processes[id] = nil }
         if stopping[id] === process { stopping[id] = nil }
         defer { scheduleDownloads() }
+        appendLog(id, process.stoppedByUser ? "--- Stopped" : "--- yt-dlp exited with code \(exitCode)")
         guard !process.stoppedByUser, let i = index(of: id), items[i].status == .downloading else { return }
         if exitCode == 0 {
             items[i].status = .completed
@@ -344,6 +356,20 @@ final class DownloadQueue {
         items[i].failReason = reason
         items[i].clearProgress()
         save()
+    }
+
+    private func appendLog(_ id: UUID, _ line: String) {
+        guard items.contains(where: { $0.id == id }) else { return }
+        var lines = logs[id] ?? []
+        lines.append(line)
+        if lines.count > Self.logLimit { lines.removeFirst(lines.count - Self.logLimit) }
+        logs[id] = lines
+    }
+
+    static func shellQuoted(_ argument: String) -> String {
+        let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_./:=@%+,"))
+        if !argument.isEmpty, argument.unicodeScalars.allSatisfy(safe.contains) { return argument }
+        return "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private func index(of id: UUID) -> Int? {

@@ -6,6 +6,9 @@ struct QueueRow: View {
     let queue: DownloadQueue
 
     @State private var hovering = false
+    @State private var showingLog = false
+
+    private var hasLog: Bool { queue.logs[item.id] != nil }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -45,6 +48,9 @@ struct QueueRow: View {
             Spacer(minLength: 8)
             HStack(spacing: 6) {
                 statusBadge
+                if hasLog {
+                    iconButton("doc.text", help: "Show yt-dlp log") { showingLog = true }
+                }
                 if item.status == .completed, item.filePath != nil {
                     iconButton("magnifyingglass", help: "Show in Finder", action: revealFile)
                 }
@@ -55,6 +61,7 @@ struct QueueRow: View {
         .card(padding: 12, radius: 10)
         .onHover { hovering = $0 }
         .contextMenu { contextMenu }
+        .sheet(isPresented: $showingLog) { LogView(item: item, queue: queue) }
     }
 
     private var showsProgress: Bool {
@@ -167,6 +174,8 @@ struct QueueRow: View {
             Button("Show in Finder") { revealFile() }
                 .disabled(item.filePath == nil)
         }
+        Button("Show Log") { showingLog = true }
+            .disabled(!hasLog)
         Button("Copy Link") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(item.url, forType: .string)
