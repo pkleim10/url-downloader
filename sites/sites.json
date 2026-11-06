@@ -17,14 +17,20 @@
       "id": "ashemaletube-com",
       "name": "aShemaleTube",
       "match": ["ashemaletube.com"],
-      "method": "plugin",
+      "method": "recipe",
       "status": "working",
       "ytDlpArgs": [],
-      "plugin": "siphon/yt_dlp_plugins/extractor/ashemaletube.py",
+      "plugin": null,
+      "recipe": {
+        "unescape": true,
+        "media": "pattern",
+        "pattern": "\"hlsAuto\"\\s*:\\s*\"([^\"]+)\"",
+        "title": "<title>([^<|]+?)\\s*\\|"
+      },
       "exampleUrl": "https://www.ashemaletube.com/videos/1265329/skinny-ts-takes-bbc/",
       "lastTested": "2026-11-06",
-      "testResult": "Downloaded the full video through the plugin (118 MB): H.264 852x480 with AAC audio, 18:58, title \"Skinny ts takes bbc\". Every frame decoded cleanly. A second video (900378) also resolved to its 480p stream; six repeated page loads all passed Cloudflare on the first try.",
-      "notes": "yt-dlp has no extractor for this site. The page is behind a Cloudflare challenge: plain requests, including Siphon's recipe fetches, get HTTP 403 whatever their headers, and so does yt-dlp unless it impersonates a browser's TLS fingerprint. Desktop Chrome fingerprints pass; Safari's never do, and a bare \"chrome\" target fails about half the time, so the plugin requests chrome-131:macos-14 and retries other desktop Chrome versions on a 403. The video is in the player config as sources.hlsAuto, an HLS master playlist (480p and 240p) on cdn.ashemaletube.com that needs no referer or cookies. The generic extractor can't read it because it's a JavaScript object, not markup. A recipe can't fix this until recipes can fetch through Cloudflare."
+      "testResult": "Recipe resolved both test videos: 1265329 with a plain fetch (0.6 s) and 900378 after Cloudflare answered 403 and the browser fetch took over (8.6 s). A 60-second sample downloaded with exactly the recipe's URL and options was H.264 852x480 with AAC audio, titled \"Skinny ts takes bbc\"; every frame decoded cleanly. The full 118 MB video (18:58) downloaded and decoded earlier through the same stream.",
+      "notes": "yt-dlp has no extractor for this site. The page is behind a Cloudflare bot check that answers about a third of plain requests with HTTP 403 whatever their headers; yt-dlp itself gets 403 unless it impersonates a browser. The recipe fetches plainly and, on a 403 or challenge page, falls back to fetching through yt-dlp as desktop Chrome (Safari fingerprints never pass). The video is in the player config as sources.hlsAuto, an HLS master playlist (480p and 240p) on cdn.ashemaletube.com that needs no referer or cookies; the generic extractor can't read it because it's in a script, not markup, so the recipe unescapes the page and captures it with a pattern. This replaced a Python plugin, archived in sites/plugins-archive."
     }
   ]
 }

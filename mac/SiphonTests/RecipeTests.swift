@@ -65,6 +65,29 @@ struct RecipeTests {
         ])
     }
 
+    @Test func patternFindsURLInEscapedPlayerConfig() {
+        let html = #"var playerConfig = { sources: {"hlsAuto":"https:\/\/cdn.example.com\/key=a,end=1\/multi=854x480:x\/_TPL_.mp4"}, aspectRatio: '852/480' };"#
+        let pattern = #""hlsAuto"\s*:\s*"([^"]+)""#
+        #expect(RecipeRunner.firstMatch(pattern, in: RecipeRunner.unescape(html))
+                == "https://cdn.example.com/key=a,end=1/multi=854x480:x/_TPL_.mp4")
+    }
+
+    @Test func recognisesCloudflareChallenge() {
+        #expect(BrowserFetch.isChallenge("<html><head><title>Just a moment...</title>"))
+        #expect(BrowserFetch.isChallenge(#"<script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>"#))
+        #expect(!BrowserFetch.isChallenge("<html><title>Skinny ts takes bbc | aShemaleTube</title>" + String(repeating: "x", count: 30_000)
+                                          + "challenges.cloudflare.com"))
+    }
+
+    @Test func decodesFetchAndPattern() {
+        let json = #"{"sites":[{"id":"a","name":"A","match":["a.com"],"method":"recipe","status":"working","recipe":{"fetch":"browser","unescape":true,"media":"pattern","pattern":"\"hlsAuto\":\"([^\"]+)\""}}]}"#
+        let recipe = SiteRegistry.decode(Data(json.utf8)).first?.recipe
+        #expect(recipe?.fetch == .browser)
+        #expect(recipe?.media == .pattern)
+        #expect(recipe?.pattern == #""hlsAuto":"([^"]+)""#)
+        #expect(recipe?.summary.hasPrefix("Fetch pages as desktop Chrome") == true)
+    }
+
     @Test func decodesSiteEntryAndMapsFollowEmbed() throws {
         let json = #"""
         {"sites":[

@@ -22,13 +22,25 @@ struct Recipe: Codable, Equatable {
         case ytdlp
         /// Collect <source>/<video> URLs and download the best one that fits the quality setting.
         case sources
+        /// Take the URL captured by `pattern` (e.g. from a player config in a script) and hand it to yt-dlp.
+        case pattern
     }
 
+    enum Fetch: String, Codable {
+        /// Plain request, retried through `BrowserFetch` when a bot check answers 403/503 (the default).
+        case auto
+        /// Always fetch through `BrowserFetch`, for sites known to sit behind a bot check.
+        case browser
+    }
+
+    var fetch: Fetch?
     /// Follow the page's player iframe first.
     var embed: Embed?
     /// Undo JavaScript string escaping (\" \/ \u0026) before reading the markup.
     var unescape: Bool?
     var media: Media
+    /// For `media: pattern`: regex with one capture group for the media URL, applied after `unescape`.
+    var pattern: String?
     /// Regex with one capture group, applied to the page, for the title.
     var title: String?
     /// Send the page that listed the media as referer when downloading it.
@@ -37,6 +49,7 @@ struct Recipe: Codable, Equatable {
     /// The recipe's steps in plain words, for the Sites window.
     var summary: String {
         var steps: [String] = []
+        if fetch == .browser { steps.append("Fetch pages as desktop Chrome (through yt-dlp)") }
         if let embed {
             steps.append(embed.match.map { "Open the player iframe matching \($0)" } ?? "Open the most player-like iframe")
             if media == .sources { steps.append(embed.referer == false ? "fetch it without a referer" : "fetch it with the page as referer") }
@@ -45,6 +58,7 @@ struct Recipe: Codable, Equatable {
         switch media {
         case .ytdlp: steps.append(embed == nil ? "give yt-dlp the page" : "give yt-dlp the player's URL")
         case .sources: steps.append("pick the best video source for the Quality setting")
+        case .pattern: steps.append("give yt-dlp the URL matching \(pattern ?? "?")")
         }
         if let title { steps.append("title from \(title)") }
         return steps.joined(separator: ", ") + "."
@@ -90,9 +104,10 @@ enum RecipeError: LocalizedError, Equatable {
 
 enum RecipeRunner {
     static func resolve(page: URL, recipe: Recipe, quality: QualityPreset) async throws -> RecipeResolution {
-        let pageHTML = try await fetch(page, referer: nil)
+        let mode = recipe.fetch ?? .auto
+        let pageHTML = try await fetch(page, referer: nil, mode: mode)
         let title = recipe.title.flatMap { firstMatch($0, in: pageHTML) }.map(cleanTitle)
-            ?? (recipe.media == .sources ? defaultTitle(in: pageHTML) : nil)
+            ?? (recipe.media == .ytdlp ? nil : defaultTitle(in: pageHTML))
         let videoID = pageID(page)
 
         var html = pageHTML
@@ -103,8 +118,8 @@ enum RecipeRunner {
                 ?? EmbedFinder.find(in: pageHTML, pageURL: page)
             guard let found else { throw RecipeError.noEmbed }
             embedURL = found
-            if recipe.media == .sources {
-                html = try await fetch(found, referer: embed.referer == false ? nil : page.absoluteString)
+            if recipe.media != .ytdlp {
+                html = try await fetch(found, referer: embed.referer == false ? nil : page.absoluteString, mode: mode)
                 base = found
             }
         }
@@ -119,6 +134,12 @@ enum RecipeRunner {
             return RecipeResolution(
                 url: source.url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
                 title: title, videoID: videoID, sourceLabel: source.label, embedURL: embedURL)
+        case .pattern:
+            guard let pattern = recipe.pattern, let raw = firstMatch(pattern, in: html),
+                  let url = resolve(raw, base: base) else { throw RecipeError.noSources }
+            return RecipeResolution(
+                url: url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
+                title: title, videoID: videoID, embedURL: embedURL)
         }
     }
 
@@ -235,7 +256,18 @@ enum RecipeRunner {
         return url
     }
 
-    private static func fetch(_ url: URL, referer: String?) async throws -> String {
+    private static func fetch(_ url: URL, referer: String?, mode: Recipe.Fetch) async throws -> String {
+        if mode == .browser { return try await BrowserFetch.page(url, referer: referer) }
+        do {
+            let html = try await plainFetch(url, referer: referer)
+            if BrowserFetch.isChallenge(html) { return try await BrowserFetch.page(url, referer: referer) }
+            return html
+        } catch RecipeError.pageUnavailable(let detail) where detail == "HTTP 403" || detail == "HTTP 503" {
+            return try await BrowserFetch.page(url, referer: referer)
+        }
+    }
+
+    private static func plainFetch(_ url: URL, referer: String?) async throws -> String {
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue(EmbedFinder.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
