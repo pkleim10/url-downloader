@@ -136,6 +136,26 @@ struct RecipeTests {
         #expect(RecipeRunner.titleTrim(in: "<title>Just A Title</title>", page: hq) == nil)
     }
 
+    @Test func detailsListOnlyWhatDiffersFromTheBuiltIn() throws {
+        #expect(Recipe.followEmbed.details.isEmpty)
+        #expect(Recipe.playerConfig.details.isEmpty)
+
+        let hq = URL(string: "https://hqporner.com/hdporn/1-x.html")!
+        let trim = try #require(RecipeRunner.titleTrim(in: "<title>Wide And Wet - HQporner.com</title>", page: hq))
+        let learned = SiteLearner.specialized(.smartScan, with: RecipeObservation(embedHost: "mydaddy.cc", titlePattern: trim.pattern))
+        #expect(learned.details.map(\.label) == ["Player", "Title"])
+        #expect(learned.details[0].value == "iframe matching mydaddy.cc/")
+        #expect(learned.details[1].value == #"remove "hqporner" from the end of the page title"#)
+
+        let config = SiteLearner.specialized(.playerConfig, with: RecipeObservation(matchedPattern: Recipe.playerConfig.patterns![0]))
+        #expect(config.details.map(\.value) == ["player key hlsAuto"])
+        #expect(Recipe.playerKeys(in: Recipe.playerConfig.patterns![1])?.hasPrefix("hls, hlsUrl") == true)
+
+        let custom = Recipe(fetch: .browser, unescape: true, media: .pattern, pattern: #""v"\s*:\s*"([^"]+)""#, title: "<h1>(.+)</h1>")
+        #expect(custom.details.map(\.label) == ["Fetch", "Unescape", "Video", "Video key", "Title"])
+        #expect(custom.details.last?.value == "<h1>(.+)</h1>")
+    }
+
     @Test func decodesSiteEntryAndMapsFollowEmbed() throws {
         let json = #"""
         {"sites":[

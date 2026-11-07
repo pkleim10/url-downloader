@@ -116,6 +116,15 @@ private struct SiteRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 detail("Matches", site.match.joined(separator: ", "))
                 detail("Method", SitesView.methodLabel(for: site))
+                if let recipe = site.recipe {
+                    let lines = recipe.details
+                    if lines.isEmpty, recipe.base != nil {
+                        detail("Recipe", "the built-in as is")
+                    }
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        detail(line.label, line.value)
+                    }
+                }
                 detail("yt-dlp options", site.ytDlpArgs.isEmpty ? "None" : site.ytDlpArgs.joined(separator: " "))
                 if let plugin = site.plugin { detail("Plugin", plugin) }
                 if let lastTested = site.lastTested { detail("Last tested", lastTested) }

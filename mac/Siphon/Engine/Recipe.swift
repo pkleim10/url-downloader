@@ -75,6 +75,51 @@ struct Recipe: Codable, Equatable {
         builtIns.first { $0.base == name }
     }
 
+    /// What this recipe sets beyond its built-in, as (label, value) lines for the Sites window.
+    /// Recipes without a built-in list every step.
+    var details: [(label: String, value: String)] {
+        let base = self.base.flatMap(Self.builtIn(named:))
+        var lines: [(String, String)] = []
+        if fetch != base?.fetch, let fetch {
+            lines.append(("Fetch", fetch == .browser ? "always as desktop Chrome (through yt-dlp)" : "plain, as desktop Chrome if blocked"))
+        }
+        if embed != base?.embed, let embed {
+            lines.append(("Player", embed.match.map { "iframe matching \($0.replacingOccurrences(of: "\\", with: ""))" }
+                          ?? "most player-like iframe"))
+            if embed.referer == false { lines.append(("Referer", "player fetched without the page as referer")) }
+        }
+        if unescape != base?.unescape, unescape == true { lines.append(("Unescape", "undo JavaScript escaping")) }
+        if media != base?.media {
+            let video: String = switch media {
+            case .ytdlp: "give yt-dlp the player's URL"
+            case .sources: "best <source> for the Quality setting"
+            case .pattern: "URL found by a pattern"
+            }
+            lines.append(("Video", video))
+        }
+        if pattern != base?.pattern, let pattern {
+            lines.append(("Video key", Self.playerKeys(in: pattern).map { "player key \($0)" } ?? pattern))
+        }
+        if patterns != base?.patterns, let patterns { lines.append(("Video patterns", patterns.joined(separator: "\n"))) }
+        if title != base?.title, let title {
+            lines.append(("Title", RecipeRunner.trimmedSiteName(in: title).map { "remove \"\($0)\" from the end of the page title" } ?? title))
+        }
+        if mediaReferer != base?.mediaReferer, mediaReferer == true { lines.append(("Referer", "video fetched with the player as referer")) }
+        return lines
+    }
+
+    /// "hlsAuto" for `["']?hlsAuto["']?\s*:…`, "hls, hlsUrl, …" for `["']?(?:hls|hlsUrl|…)["']?…`.
+    static func playerKeys(in pattern: String) -> String? {
+        let prefix = #"["']?"#
+        guard pattern.hasPrefix(prefix) else { return nil }
+        let rest = pattern.dropFirst(prefix.count)
+        if rest.hasPrefix("(?:"), let end = rest.firstIndex(of: ")") {
+            return rest[rest.index(rest.startIndex, offsetBy: 3)..<end].replacingOccurrences(of: "|", with: ", ")
+        }
+        let key = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+        return key.isEmpty ? nil : String(key)
+    }
+
     // MARK: - Coding
 
     private enum CodingKeys: String, CodingKey {
@@ -252,6 +297,18 @@ enum RecipeRunner {
     }
 
     static let titleSeparators = "-|–—:·•"
+    private static let titleTrimPrefix = #"<title[^>]*>\s*([^<]*[^<\s])\s*["#
+        + NSRegularExpression.escapedPattern(for: titleSeparators) + #"]\s*[^"#
+        + NSRegularExpression.escapedPattern(for: titleSeparators) + "<]*"
+    private static let titleTrimSuffix = #"[^<]*</title>"#
+
+    /// The site name a `titleTrim` pattern removes, or nil for any other title regex.
+    static func trimmedSiteName(in pattern: String) -> String? {
+        guard pattern.hasPrefix(titleTrimPrefix), pattern.hasSuffix(titleTrimSuffix),
+              pattern.count > titleTrimPrefix.count + titleTrimSuffix.count else { return nil }
+        let escaped = pattern.dropFirst(titleTrimPrefix.count).dropLast(titleTrimSuffix.count)
+        return escaped.replacingOccurrences(of: #"\\(.)"#, with: "$1", options: .regularExpression)
+    }
 
     /// A `title` regex that removes the site's name (og:site_name, or the domain's main label)
     /// from the end of the page's <title>, and the title it gives on this page. Keeps everything
@@ -266,11 +323,8 @@ enum RecipeRunner {
             let labels = host.split(separator: ".").map(String.init)
             if labels.count >= 2 { names.append(labels[labels.count - 2]) }
         }
-        let separators = "[" + NSRegularExpression.escapedPattern(for: titleSeparators) + "]"
-        let notSeparator = "[^" + NSRegularExpression.escapedPattern(for: titleSeparators) + "<]"
         for name in names where name.count >= 3 {
-            let pattern = #"<title[^>]*>\s*([^<]*[^<\s])\s*"# + separators + #"\s*"# + notSeparator + "*"
-                + NSRegularExpression.escapedPattern(for: name) + #"[^<]*</title>"#
+            let pattern = titleTrimPrefix + NSRegularExpression.escapedPattern(for: name) + titleTrimSuffix
             if let title = firstMatch(pattern, in: html).map(cleanTitle), !title.isEmpty, title.count < raw.count {
                 return (pattern, title)
             }
