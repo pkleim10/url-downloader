@@ -53,6 +53,26 @@ struct DownloadHistoryTests {
         #expect(DownloadHistory(fileURL: url).entries.isEmpty)
     }
 
+    @Test func finishedItemMovesBelowTheLastCompletedOne() {
+        func item(_ name: String, _ status: DownloadStatus) -> QueueItem {
+            QueueItem(url: "https://example.com/\(name)", destination: "/tmp", status: status)
+        }
+        let done1 = item("done1", .completed), done2 = item("done2", .completed)
+        let running = item("running", .downloading), pending = item("pending", .pending)
+        var finished = item("finished", .downloading)
+        finished.status = .completed
+        let names = { (items: [QueueItem]) in items.map { String($0.url.split(separator: "/").last!) } }
+
+        let queue = [done1, running, done2, pending, finished]
+        #expect(names(DownloadQueue.movingBelowCompleted(finished.id, in: queue))
+                == ["done1", "running", "done2", "finished", "pending"])
+        let tidy = [done1, done2, running, finished, pending]
+        #expect(names(DownloadQueue.movingBelowCompleted(finished.id, in: tidy))
+                == ["done1", "done2", "finished", "running", "pending"])
+        let first = [running, pending, finished]
+        #expect(names(DownloadQueue.movingBelowCompleted(finished.id, in: first)) == ["finished", "running", "pending"])
+    }
+
     @Test func queueHoldsALinkDownloadedBefore() throws {
         let folder = scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

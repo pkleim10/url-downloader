@@ -30,8 +30,45 @@
       },
       "exampleUrl": "https://www.ashemaletube.com/videos/1265329/skinny-ts-takes-bbc/",
       "lastTested": "2026-11-06",
-      "testResult": "The built-in playerConfig recipe alone resolved both test videos (1265329 and 900378) to their HLS streams, with titles from og:title. A 20-second sample downloaded with exactly its URL and options was H.264 852x480 with AAC audio, saved as \"Skinny ts takes bbc [skinny-ts-takes-bbc].mp4\"; every frame decoded cleanly. Earlier: the full 118 MB video (18:58) decoded, and a Cloudflare 403 fell back to the browser fetch and resolved in 8.6 s.",
+      "testResult": "Rechecked 2026-11-06 after the playerConfig change: it now picks the player's multi-quality HLS link (media=hls4A/multi=854x480,426x240/_TPL_.mp4) on cdn.ashemaletube.com; a 20-second sample was H.264 852x480 with AAC audio and decoded cleanly. Before: the built-in playerConfig recipe alone resolved both test videos (1265329 and 900378) to their HLS streams, with titles from og:title. A 20-second sample downloaded with exactly its URL and options was H.264 852x480 with AAC audio, saved as \"Skinny ts takes bbc [skinny-ts-takes-bbc].mp4\"; every frame decoded cleanly. Earlier: the full 118 MB video (18:58) decoded, and a Cloudflare 403 fell back to the browser fetch and resolved in 8.6 s.",
       "notes": "yt-dlp has no extractor for this site. The page is behind a Cloudflare bot check that answers about a third of plain requests with HTTP 403 whatever their headers; yt-dlp itself gets 403 unless it impersonates a browser. The recipe fetches plainly and, on a 403 or challenge page, falls back to fetching through yt-dlp as desktop Chrome (Safari fingerprints never pass). The video is in the player config as sources.hlsAuto, an HLS master playlist (480p and 240p) on cdn.ashemaletube.com that needs no referer or cookies; the generic extractor can't read it because it's in a script, not markup, so the built-in playerConfig recipe (unescape the page, take the first stream or video URL under a common player key) finds it with no site-specific settings; the title comes from the page's og:title. This replaced a Python plugin, archived in sites/plugins-archive."
+    },
+    {
+      "id": "puncher-tube",
+      "name": "Puncher.tube",
+      "match": [
+        "puncher.tube"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "followEmbed"
+      },
+      "exampleUrl": "https://puncher.tube/video/1185159/angelbabyluuv-glad-you-came-by-tonight.html",
+      "lastTested": "2026-11-06",
+      "testResult": "The built-in followEmbed recipe alone found https://x-x-x.tube/embed/270856/ in 0.7 s. A 20-second sample downloaded with exactly its URL and referer was H.264 1280x720 with AAC audio; every frame decoded cleanly. Earlier: the full video (74.8 MB, 7:21) decoded.",
+      "notes": "yt-dlp has no puncher.tube extractor, and the generic extractor reports Unsupported URL: the page has no video of its own, only an iframe to a KVS player on x-x-x.tube. The generic extractor doesn't follow arbitrary iframes but handles the KVS embed itself with no cookies, so the built-in followEmbed recipe (pick the most player-like iframe, hand it to yt-dlp with the page as referer) is all the site needs. This replaced a Python plugin, archived in sites/plugins-archive."
+    },
+    {
+      "id": "hqporner-com",
+      "name": "HQporner",
+      "match": [
+        "hqporner.com",
+        "mydaddy.cc"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "smartScan"
+      },
+      "exampleUrl": "https://hqporner.com/hdporn/128512-wide_and_wet.html",
+      "lastTested": "2026-11-06",
+      "testResult": "The built-in smartScan recipe alone found the mydaddy.cc player, read its 360p, 720p60 and 1080p60 sources and picked 1080.mp4 on bigcdn.cc, titled \"Wide And Wet\" with id 128512-wide_and_wet. A 20-second sample was H.264 1920x1080 with AAC audio; every frame decoded cleanly.",
+      "notes": "yt-dlp has no hqporner extractor and the generic extractor reports Unsupported URL: the page iframes a player from mydaddy.cc, which returns an empty page without an hqporner referer and writes its <video> tag from a JavaScript string with every quote escaped, so yt-dlp's HTML5 parser sees garbled extensions (mp4\\\") and refuses them. The built-in smartScan recipe fetches the iframe with the page as referer, undoes the escaping, reads the <source> qualities and gives yt-dlp the tallest that fits the Quality setting; its default title trim already gives the clean title. The video files need no referer or cookies. This replaced a Python plugin, archived in sites/plugins-archive."
     },
     {
       "id": "3movs-com",

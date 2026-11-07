@@ -163,6 +163,7 @@ struct ContentView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .contentMargins(.bottom, 16, for: .scrollContent)
+                .animation(.snappy, value: queue.items.map(\.id))
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)

@@ -84,25 +84,34 @@ struct IntegrationTests {
         #expect(queue.sites.site(for: Self.sampleURL)?.id == learned.id)
     }
 
-    /// The bundled recipes still find the video on both sites that used to need plugins.
-    @Test(.timeLimit(.minutes(1)))
-    func bundledRecipesResolve() async throws {
+    /// The sites that used to need plugins are bundled with a bare built-in recipe, and it still finds their video.
+    @Test(.timeLimit(.minutes(1)), arguments: [
+        ("puncher-tube", "followEmbed"), ("hqporner-com", "smartScan"), ("ashemaletube-com", "playerConfig"),
+    ])
+    func formerPluginSitesResolveWithABuiltIn(id: String, base: String) async throws {
         let sitesFolder = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("sites", isDirectory: true)
-        let sites = SiteRegistry.load(from: sitesFolder)
+        let site = try #require(SiteRegistry.load(from: sitesFolder).sites.first { $0.id == id })
+        #expect(site.plugin == nil)
+        let recipe = try #require(site.recipe)
+        #expect(recipe == Recipe.builtIn(named: base), "\(id) should be the bare \(base) built-in")
+        #expect(recipe.details.isEmpty, "\(recipe.details)")
 
-        let puncher = try #require(sites.site(for: "https://puncher.tube/video/1185159/x.html"))
-        let embed = try await RecipeRunner.resolve(
-            page: URL(string: try #require(puncher.exampleUrl))!, recipe: try #require(puncher.recipe), quality: .best)
-        #expect(embed.url.absoluteString.hasPrefix("https://x-x-x.tube/embed/"), "\(embed.url)")
-
-        let hqporner = try #require(sites.site(for: "https://hqporner.com/hdporn/1-x.html"))
-        let video = try await RecipeRunner.resolve(
-            page: URL(string: try #require(hqporner.exampleUrl))!, recipe: try #require(hqporner.recipe), quality: .p720)
-        #expect(video.title == "Wide And Wet")
-        #expect(video.videoID == "128512-wide_and_wet")
-        #expect(video.url.path.hasSuffix(".mp4"), "\(video.url)")
-        #expect(video.sourceLabel?.hasPrefix("720") == true, "\(video.sourceLabel ?? "-")")
+        let example = try #require(site.exampleUrl)
+        let page = try #require(URL(string: example))
+        let video = try await RecipeRunner.resolve(page: page, recipe: recipe, quality: .p720)
+        switch id {
+        case "puncher-tube":
+            #expect(video.url.absoluteString.hasPrefix("https://x-x-x.tube/embed/"), "\(video.url)")
+        case "hqporner-com":
+            #expect(video.title == "Wide And Wet")
+            #expect(video.videoID == "128512-wide_and_wet")
+            #expect(video.url.path.hasSuffix(".mp4"), "\(video.url)")
+            #expect(video.sourceLabel?.hasPrefix("720") == true, "\(video.sourceLabel ?? "-")")
+        default:
+            #expect(video.url.host == "cdn.ashemaletube.com", "\(video.url)")
+            #expect(video.title?.isEmpty == false)
+        }
     }
 }

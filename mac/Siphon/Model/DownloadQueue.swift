@@ -185,6 +185,21 @@ final class DownloadQueue {
         save()
     }
 
+    /// Puts a just-finished item right below the last completed one, so finished downloads
+    /// collect at the top in the order they finished and unfinished ones stay below them.
+    func moveBelowCompleted(_ id: UUID) {
+        items = Self.movingBelowCompleted(id, in: items)
+    }
+
+    static func movingBelowCompleted(_ id: UUID, in items: [QueueItem]) -> [QueueItem] {
+        var items = items
+        guard let from = items.firstIndex(where: { $0.id == id }) else { return items }
+        let item = items.remove(at: from)
+        let target = (items.lastIndex { $0.status == .completed }).map { $0 + 1 } ?? 0
+        items.insert(item, at: target)
+        return items
+    }
+
     // MARK: - Whole-queue actions
 
     func pauseAll() {
@@ -406,6 +421,7 @@ final class DownloadQueue {
                 recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state, embedURL: embeds[id],
                               observed: observations[id])
             }
+            moveBelowCompleted(id)
         } else {
             attemptFailed(id, reason: YtDlpOutputParser.failureReason(from: lines, exitCode: exitCode))
             return
