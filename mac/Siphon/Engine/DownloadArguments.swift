@@ -50,6 +50,11 @@ enum DownloadArguments {
         })
     }
 
+    /// yt-dlp's generic HTML5 reader titles each `<video>` on a page "Title (1)", "Title (2)"…
+    /// even when only the first is downloaded. Only that extractor's titles are touched, so a
+    /// real title ending in "(1)" from any other extractor is kept.
+    static let numberedTitleFix = ["--parse-metadata", #"%(extractor)s %(title)s:^html5 (?P<title>.+) \(\d+\)$"#]
+
     static func outputTemplate(destination: URL, prefix: String) -> String {
         let clean = sanitizePrefix(prefix.trimmingCharacters(in: .whitespaces))
         let name = clean.isEmpty ? "%(title)s.%(ext)s" : "\(clean)-%(title)s.%(ext)s"
@@ -70,6 +75,7 @@ enum DownloadArguments {
         if let pluginDirectory {
             args += ["--plugin-dirs", pluginDirectory.path]
         }
+        args += numberedTitleFix
         args += siteArguments
         args += quality.formatArguments
         args += [

@@ -69,7 +69,8 @@ struct DownloadArgumentsTests {
             pluginDirectory: URL(fileURLWithPath: "/tmp/plugins"),
             quality: .p1080
         )
-        #expect(Array(args.prefix(4)) == ["--plugin-dirs", "/tmp/plugins", "--referer", "https://x.com/"])
+        #expect(Array(args.prefix(6))
+                == ["--plugin-dirs", "/tmp/plugins"] + DownloadArguments.numberedTitleFix + ["--referer", "https://x.com/"])
         #expect(Array(args.suffix(2)) == ["--", "https://x.com/v/1"])
         let f = try #require(args.firstIndex(of: "-f"))
         #expect(args[f + 1].contains("height<=1080"))
