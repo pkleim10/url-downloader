@@ -476,7 +476,9 @@ final class DownloadQueue {
     private func attemptFailed(_ id: UUID, reason: String) {
         guard let i = index(of: id) else { return }
         if var state = learning[id] {
-            let kind = SiteLearner.classify(reason)
+            let savedRecipeWorked = state.index == 0 && state.existing?.recipe != nil
+                && state.existing?.status == "working"
+            let kind = SiteLearner.classify(reason, savedRecipeWorked: savedRecipeWorked)
             if state.firstFailure == nil { state.firstFailure = reason }
             if kind == .site, state.index + 1 < state.attempts.count {
                 state.index += 1
@@ -498,6 +500,8 @@ final class DownloadQueue {
                 case .piracy: "Recorded in Sites as unsupported (yt-dlp: piracy site)"
                 default: "Recorded in Sites as broken"
                 }
+            } else if kind == .itemSpecific, savedRecipeWorked {
+                items[i].note = "This video seems to be gone; the site's saved recipe is kept"
             } else {
                 items[i].note = nil
             }

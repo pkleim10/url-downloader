@@ -240,6 +240,19 @@ struct SiteLearnerTests {
         #expect(SiteLearner.classify("[youtube] abc: Private video. Sign in if you've been granted access") == .itemSpecific)
         #expect(SiteLearner.classify("Unsupported URL: https://example.com/") == .site)
         #expect(SiteLearner.classify("HTTP Error 403: Forbidden") == .site)
+        #expect(SiteLearner.classify("Couldn't load the page: HTTP 404 from mydaddy.cc") == .site)
+        #expect(SiteLearner.classify("Couldn't load the page: HTTP 404 from mydaddy.cc", savedRecipeWorked: true) == .itemSpecific)
+    }
+
+    @Test func brokenEntryKeepsTheSavedRecipe() throws {
+        let existing = SiteConfig(id: "example-com", name: "example.com", match: ["example.com"], method: "recipe",
+                                  status: "working", source: "learned", recipe: .smartScan)
+        let entry = try #require(SiteLearner.failedEntry(
+            url: "https://example.com/v", kind: .site, tried: [], firstFailure: nil,
+            lastFailure: "No video sources found in the player", existing: existing))
+        #expect(entry.status == "broken")
+        #expect(entry.recipe == .smartScan)
+        #expect(SiteLearner.attempts(for: "https://example.com/v2", existing: entry).first?.label == "the saved recipe")
     }
 
     @Test func workingEntryRecordsDownloadRecipeAndWhy() throws {

@@ -79,7 +79,9 @@ enum SiteLearner {
         return kept
     }
 
-    static func classify(_ reason: String) -> FailureKind {
+    /// `savedRecipeWorked`: the failure came from a recipe that has already downloaded from this
+    /// site, so a missing page means this video is gone rather than the recipe being wrong.
+    static func classify(_ reason: String, savedRecipeWorked: Bool = false) -> FailureKind {
         let text = reason.lowercased()
         let local = [
             "nodename nor servname", "network is unreachable", "timed out", "no route to host",
@@ -95,6 +97,7 @@ enum SiteLearner {
             "--cookies",
         ]
         if item.contains(where: text.contains) { return .itemSpecific }
+        if savedRecipeWorked, text.contains("http 404") || text.contains("http 410") { return .itemSpecific }
         return .site
     }
 
@@ -214,11 +217,13 @@ enum SiteLearner {
             : "Learned by Siphon: \(tried.map(\.label).joined(separator: ", ")) all failed. "
                 + (firstFailure.map { "First error: \($0). " } ?? "")
                 + "Needs a closer look: a new built-in recipe, the user's browser session, or a plugin."
+        let kept = refused ? nil : existing?.recipe
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: refused ? "unsupported" : "builtin", status: refused ? "unsupported" : "broken",
+            method: refused ? "unsupported" : kept == nil ? "builtin" : "recipe", status: refused ? "unsupported" : "broken",
             exampleUrl: existing?.exampleUrl ?? url,
-            lastTested: today(date), testResult: "Failed: \(lastFailure)", notes: notes, source: "learned"
+            lastTested: today(date), testResult: "Failed: \(lastFailure)", notes: notes, source: "learned",
+            recipe: kept
         )
     }
 

@@ -747,7 +747,7 @@ enum RecipeRunner {
             let html = try await plainFetch(url, referer: referer, accept: accept)
             if BrowserFetch.isChallenge(html) { return try await BrowserFetch.page(url, referer: referer) }
             return html
-        } catch RecipeError.pageUnavailable(let detail) where detail == "HTTP 403" || detail == "HTTP 503" {
+        } catch RecipeError.pageUnavailable(let detail) where detail.hasPrefix("HTTP 403 ") || detail.hasPrefix("HTTP 503 ") {
             return try await BrowserFetch.page(url, referer: referer)
         }
     }
@@ -764,7 +764,7 @@ enum RecipeRunner {
             throw RecipeError.pageUnavailable(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw RecipeError.pageUnavailable("HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw RecipeError.pageUnavailable("HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0) from \(url.host ?? "the site")")
         }
         return String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
     }
