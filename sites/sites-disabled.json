@@ -10,8 +10,8 @@
       "ytDlpArgs": [],
       "plugin": null,
       "recipe": {
-        "embed": { "match": "x-x-x\\.tube/embed/" },
-        "media": "ytdlp"
+        "base": "followEmbed",
+        "embed": { "match": "x-x-x\\.tube/embed/" }
       },
       "exampleUrl": "https://puncher.tube/video/1185159/angelbabyluuv-glad-you-came-by-tonight.html",
       "lastTested": "2026-11-06",
@@ -27,9 +27,8 @@
       "ytDlpArgs": [],
       "plugin": null,
       "recipe": {
-        "embed": { "match": "mydaddy\\.cc/video/", "referer": true },
-        "unescape": true,
-        "media": "sources",
+        "base": "smartScan",
+        "embed": { "match": "mydaddy\\.cc/video/" },
         "title": "<title>([^<]+?)\\s*-\\s*HQporner"
       },
       "exampleUrl": "https://hqporner.com/hdporn/128512-wide_and_wet.html",

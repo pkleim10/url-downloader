@@ -88,6 +88,42 @@ struct RecipeTests {
         #expect(recipe?.summary.hasPrefix("Fetch pages as desktop Chrome") == true)
     }
 
+    @Test func baseFillsMissingFieldsAndEncodesOnlyDifferences() throws {
+        let json = #"{"base":"smartScan","embed":{"match":"mydaddy\\.cc/video/"},"title":"x(y)"}"#
+        let recipe = try JSONDecoder().decode(Recipe.self, from: Data(json.utf8))
+        #expect(recipe.media == .sources)
+        #expect(recipe.unescape == true)
+        #expect(recipe.embed?.match == #"mydaddy\.cc/video/"#)
+        #expect(recipe != .smartScan)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        #expect(String(decoding: try encoder.encode(recipe), as: UTF8.self) == json)
+        #expect(String(decoding: try encoder.encode(Recipe.followEmbed), as: UTF8.self) == #"{"base":"followEmbed"}"#)
+        #expect(recipe.summary.hasPrefix(#"Built-in "read the player's video sources": open the player iframe"#))
+    }
+
+    @Test func writtenOutBuiltInIsRecognised() throws {
+        let legacy = try JSONDecoder().decode(Recipe.self, from: Data(#"{"embed":{},"media":"ytdlp"}"#.utf8))
+        #expect(legacy == .followEmbed)
+        #expect(legacy.base == "followEmbed")
+        #expect((try? JSONDecoder().decode(Recipe.self, from: Data(#"{"base":"nope"}"#.utf8))) == nil)
+    }
+
+    @Test func playerConfigFindsCommonKeysAndSkipsNonVideo() throws {
+        func found(_ html: String) -> String? {
+            let candidates = Recipe.playerConfig.patterns ?? []
+            let text = RecipeRunner.unescape(html)
+            return candidates.lazy.compactMap { RecipeRunner.firstMatch($0, in: text) }.first
+        }
+        #expect(found(#"sources: {"hlsAuto":"https:\/\/cdn.example.com\/key=a,end=1\/_TPL_.mp4"}"#)
+                == "https://cdn.example.com/key=a,end=1/_TPL_.mp4")
+        #expect(found(#"jwplayer("p").setup({ image: "https://cdn.example.com/t.jpg", file: "https://cdn.example.com/v/master.m3u8?t=1" });"#)
+                == "https://cdn.example.com/v/master.m3u8?t=1")
+        #expect(found(#"{"poster":"https://cdn.example.com/t.jpg","src":"https://cdn.example.com/thumb.jpg","url":"https://example.com/v/2"}"#) == nil)
+        #expect(found(#"var flashvars = { video_url: 'https://cdn.example.com/get_file/1/abc/720.mp4' };"#)
+                == "https://cdn.example.com/get_file/1/abc/720.mp4")
+    }
+
     @Test func decodesSiteEntryAndMapsFollowEmbed() throws {
         let json = #"""
         {"sites":[

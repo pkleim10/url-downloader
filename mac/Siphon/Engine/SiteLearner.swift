@@ -55,6 +55,7 @@ enum SiteLearner {
             Attempt(label: "scanning the page for media", arguments: ["--use-extractors", "generic", "--impersonate", "chrome"]),
             Attempt(label: "following the page's embedded player", arguments: [], recipe: .followEmbed),
             Attempt(label: "reading video sources from the embedded player", arguments: [], recipe: .smartScan),
+            Attempt(label: "finding the video in the page's player configuration", arguments: [], recipe: .playerConfig),
         ]
         var kept: [Attempt] = []
         for attempt in list where !kept.contains(where: { $0.recipe == attempt.recipe && $0.arguments == attempt.arguments }) {
@@ -97,6 +98,9 @@ enum SiteLearner {
         if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments,
            existing.recipe == attempt.recipe, let kept = existing.notes {
             notes = kept
+        } else if attempt.recipe == .playerConfig {
+            let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
+            notes = "Learned by Siphon: \(before)The video's address is in the page's player configuration (a script), which yt-dlp doesn't read. Siphon finds it under a common player key and gives yt-dlp that stream or file."
         } else if attempt.recipe == .smartScan {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             let host = embedURL?.host.map { " from \($0)" } ?? ""

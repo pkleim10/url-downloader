@@ -75,29 +75,30 @@ struct SiteLearnerTests {
     @Test func attemptsStartPlainThenFixesWithoutDuplicates() {
         let plain = SiteLearner.attempts(for: "https://example.com/v/1", existing: nil)
         #expect(plain.first?.arguments == [])
-        #expect(plain.count == 6)
+        #expect(plain.count == 7)
         #expect(plain[2].arguments.contains("Referer:https://example.com/"))
         #expect(plain[4].recipe == .followEmbed)
         #expect(plain[5].recipe == .smartScan)
+        #expect(plain[6].recipe == .playerConfig)
         #expect(plain.prefix(4).allSatisfy { $0.recipe == nil })
 
         let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "options", status: "working",
                                ytDlpArgs: ["--impersonate", "chrome"], source: "learned")
         let again = SiteLearner.attempts(for: "https://example.com/v/1", existing: saved)
         #expect(again.first?.arguments == ["--impersonate", "chrome"])
-        #expect(again.count == 6)
+        #expect(again.count == 7)
 
         let embedSite = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "recipe", status: "working",
                                    source: "learned", recipe: .followEmbed)
         let embedFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: embedSite)
         #expect(embedFirst.first?.followEmbed == true)
-        #expect(embedFirst.count == 6)
+        #expect(embedFirst.count == 7)
 
         let recipeSite = SiteConfig(id: "r", name: "r", match: ["example.com"], method: "recipe", status: "broken",
                                     recipe: Recipe(embed: .init(match: "player\\.example"), media: .sources))
         let recipeFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: recipeSite)
         #expect(recipeFirst.first?.recipe?.embed?.match == "player\\.example")
-        #expect(recipeFirst.count == 7)
+        #expect(recipeFirst.count == 8)
     }
 
     @Test func smartScanEntryRecordsRecipe() throws {
@@ -139,8 +140,9 @@ struct SiteLearnerTests {
         #expect(site.method == "recipe")
         #expect(site.recipe == .followEmbed)
         let rewritten = try String(contentsOf: store.fileURL, encoding: .utf8)
-        #expect(!rewritten.contains("followEmbed"))
-        #expect(rewritten.contains(#""media" : "ytdlp""#))
+        #expect(!rewritten.contains(#""followEmbed" : true"#))
+        #expect(!rewritten.contains(#""method" : "embed""#))
+        #expect(rewritten.contains(#""base" : "followEmbed""#))
     }
 
     @Test func sitesWindowSortsByNameAndSearches() {

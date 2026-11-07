@@ -3,10 +3,12 @@ import Foundation
 /// A declarative way to find a site's video that Siphon carries out itself in Swift.
 /// A recipe can only fetch pages and read their text; nothing from a site is ever run.
 ///
+/// Site recipes should start from a built-in (`base`) and set only what differs, so every
+/// built-in can serve many sites and the learner can find it on its own:
+///
 ///     "recipe": {
-///       "embed": { "match": "mydaddy\\.cc/video/", "referer": true },
-///       "unescape": true,
-///       "media": "sources",
+///       "base": "smartScan",
+///       "embed": { "match": "mydaddy\\.cc/video/" },
 ///       "title": "<title>([^<]+?)\\s*-\\s*HQporner"
 ///     }
 struct Recipe: Codable, Equatable {
@@ -33,6 +35,8 @@ struct Recipe: Codable, Equatable {
         case browser
     }
 
+    /// Name of the built-in this recipe starts from; its own fields override the built-in's.
+    var base: String?
     var fetch: Fetch?
     /// Follow the page's player iframe first.
     var embed: Embed?
@@ -41,6 +45,8 @@ struct Recipe: Codable, Equatable {
     var media: Media
     /// For `media: pattern`: regex with one capture group for the media URL, applied after `unescape`.
     var pattern: String?
+    /// For `media: pattern`: more regexes tried in order after `pattern`.
+    var patterns: [String]?
     /// Regex with one capture group, applied to the page, for the title.
     var title: String?
     /// Send the page that listed the media as referer when downloading it.
@@ -49,25 +55,129 @@ struct Recipe: Codable, Equatable {
     /// The recipe's steps in plain words, for the Sites window.
     var summary: String {
         var steps: [String] = []
-        if fetch == .browser { steps.append("Fetch pages as desktop Chrome (through yt-dlp)") }
+        if let base, let builtIn = Self.builtIn(named: base) {
+            steps.append("built-in \"\(builtIn.displayName)\":")
+        }
+        if fetch == .browser { steps.append("fetch pages as desktop Chrome (through yt-dlp)") }
         if let embed {
-            steps.append(embed.match.map { "Open the player iframe matching \($0)" } ?? "Open the most player-like iframe")
+            steps.append(embed.match.map { "open the player iframe matching \($0)" } ?? "open the most player-like iframe")
             if media == .sources { steps.append(embed.referer == false ? "fetch it without a referer" : "fetch it with the page as referer") }
         }
         if unescape == true { steps.append("undo JavaScript escaping") }
         switch media {
         case .ytdlp: steps.append(embed == nil ? "give yt-dlp the page" : "give yt-dlp the player's URL")
         case .sources: steps.append("pick the best video source for the Quality setting")
-        case .pattern: steps.append("give yt-dlp the URL matching \(pattern ?? "?")")
+        case .pattern:
+            if let pattern { steps.append("give yt-dlp the URL matching \(pattern)") }
+            if let patterns { steps.append("give yt-dlp the first URL found under \(patterns.count) common player-config keys") }
         }
         if let title { steps.append("title from \(title)") }
-        return steps.joined(separator: ", ") + "."
+        let text = steps.joined(separator: ", ").replacingOccurrences(of: ":,", with: ":") + "."
+        return text.prefix(1).uppercased() + text.dropFirst()
     }
 
-    /// Download the page's player iframe with yt-dlp (the "embed" automatic fix).
-    static let followEmbed = Recipe(embed: Embed(), media: .ytdlp)
-    /// Read video sources straight out of the page's player iframe (the "smart scan" fix).
-    static let smartScan = Recipe(embed: Embed(), unescape: true, media: .sources)
+    // MARK: - Built-ins
+
+    /// Download the page's player iframe with yt-dlp.
+    static let followEmbed = Recipe(base: "followEmbed", embed: Embed(), media: .ytdlp)
+    /// Read video sources straight out of the page's player iframe.
+    static let smartScan = Recipe(base: "smartScan", embed: Embed(), unescape: true, media: .sources)
+    /// Find the video address in the page's player configuration (a script, not markup), trying the
+    /// keys common players use from most to least specific. Only stream and video file URLs count,
+    /// so thumbnails and page links under the same keys are skipped.
+    static let playerConfig = Recipe(
+        base: "playerConfig", unescape: true, media: .pattern,
+        patterns: [
+            #"["']?hlsAuto["']?\s*:\s*["'](https?://[^"'\s]+)["']"#,
+            #"["']?(?:hls|hlsUrl|hls_url|hlsSource|m3u8|m3u8Url|m3u8_url)["']?\s*:\s*["'](https?://[^"'\s]+)["']"#,
+            #"["']?(?:file|video_url|videoUrl|video_src|videoSrc|contentUrl|mp4|mp4Url|src|source|url)["']?\s*:\s*["'](https?://[^"'\s]+\.(?:m3u8|mpd|mp4|webm)(?:\?[^"'\s]*)?)["']"#,
+        ])
+
+    static let builtIns = [followEmbed, smartScan, playerConfig]
+
+    static func builtIn(named name: String) -> Recipe? {
+        builtIns.first { $0.base == name }
+    }
+
+    var displayName: String {
+        switch base {
+        case "followEmbed": "follow the embedded player"
+        case "smartScan": "read the player's video sources"
+        case "playerConfig": "find the video in the player configuration"
+        default: base ?? "custom"
+        }
+    }
+
+    // MARK: - Coding
+
+    private enum CodingKeys: String, CodingKey {
+        case base, fetch, embed, unescape, media, pattern, patterns, title, mediaReferer
+    }
+
+    init(base: String? = nil, fetch: Fetch? = nil, embed: Embed? = nil, unescape: Bool? = nil, media: Media,
+         pattern: String? = nil, patterns: [String]? = nil, title: String? = nil, mediaReferer: Bool? = nil) {
+        self.base = base
+        self.fetch = fetch
+        self.embed = embed
+        self.unescape = unescape
+        self.media = media
+        self.pattern = pattern
+        self.patterns = patterns
+        self.title = title
+        self.mediaReferer = mediaReferer
+    }
+
+    /// Fields missing from the JSON come from the built-in named by `base`. A recipe written out
+    /// in full that equals a built-in is recognised as that built-in.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let baseName = try c.decodeIfPresent(String.self, forKey: .base)
+        let base = try baseName.map { name in
+            guard let builtIn = Self.builtIn(named: name) else {
+                throw DecodingError.dataCorruptedError(forKey: .base, in: c, debugDescription: "Unknown built-in recipe \(name)")
+            }
+            return builtIn
+        }
+        self.base = baseName
+        fetch = try c.decodeIfPresent(Fetch.self, forKey: .fetch) ?? base?.fetch
+        embed = try c.decodeIfPresent(Embed.self, forKey: .embed) ?? base?.embed
+        unescape = try c.decodeIfPresent(Bool.self, forKey: .unescape) ?? base?.unescape
+        guard let media = try c.decodeIfPresent(Media.self, forKey: .media) ?? base?.media else {
+            throw DecodingError.keyNotFound(CodingKeys.media, .init(codingPath: c.codingPath, debugDescription: "A recipe needs media or base"))
+        }
+        self.media = media
+        pattern = try c.decodeIfPresent(String.self, forKey: .pattern) ?? base?.pattern
+        patterns = try c.decodeIfPresent([String].self, forKey: .patterns) ?? base?.patterns
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? base?.title
+        mediaReferer = try c.decodeIfPresent(Bool.self, forKey: .mediaReferer) ?? base?.mediaReferer
+        if baseName == nil, let same = Self.builtIns.first(where: { $0.withoutBase == self }) {
+            self.base = same.base
+        }
+    }
+
+    /// Writes `base` plus only the fields that differ from it.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        let base = self.base.flatMap(Self.builtIn(named:))
+        try c.encodeIfPresent(self.base, forKey: .base)
+        func put<T: Encodable & Equatable>(_ value: T?, _ inBase: T?, _ key: CodingKeys) throws {
+            if let value, base == nil || value != inBase { try c.encode(value, forKey: key) }
+        }
+        try put(fetch, base?.fetch, .fetch)
+        try put(embed, base?.embed, .embed)
+        try put(unescape, base?.unescape, .unescape)
+        try put(media, base?.media, .media)
+        try put(pattern, base?.pattern, .pattern)
+        try put(patterns, base?.patterns, .patterns)
+        try put(title, base?.title, .title)
+        try put(mediaReferer, base?.mediaReferer, .mediaReferer)
+    }
+
+    private var withoutBase: Recipe {
+        var copy = self
+        copy.base = nil
+        return copy
+    }
 }
 
 /// What a recipe resolved to: the URL to give yt-dlp and how to label the download.
@@ -135,8 +245,9 @@ enum RecipeRunner {
                 url: source.url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
                 title: title, videoID: videoID, sourceLabel: source.label, embedURL: embedURL)
         case .pattern:
-            guard let pattern = recipe.pattern, let raw = firstMatch(pattern, in: html),
-                  let url = resolve(raw, base: base) else { throw RecipeError.noSources }
+            let candidates = (recipe.pattern.map { [$0] } ?? []) + (recipe.patterns ?? [])
+            guard let url = candidates.lazy.compactMap({ firstMatch($0, in: html).flatMap { resolve($0, base: base) } }).first
+            else { throw RecipeError.noSources }
             return RecipeResolution(
                 url: url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
                 title: title, videoID: videoID, embedURL: embedURL)
