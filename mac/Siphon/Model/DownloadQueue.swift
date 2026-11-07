@@ -280,8 +280,8 @@ final class DownloadQueue {
         if learning[id] == nil, AppSettings.learnSites, SiteLearner.shouldLearn(site) {
             learning[id] = LearningState(attempts: SiteLearner.attempts(for: item.url, existing: site), existing: site)
         }
-        let siteArguments = learning[id]?.current.arguments ?? site?.ytDlpArgs ?? []
         let recipe = learning[id].map { $0.current.recipe } ?? site?.recipe
+        let siteArguments = URL(string: item.url).map { page in recipe?.downloadArguments(page: page) ?? [] } ?? []
 
         items[i].status = .downloading
         items[i].siteName = site?.name
@@ -300,7 +300,7 @@ final class DownloadQueue {
         }
 
         observations[id] = nil
-        guard let recipe else {
+        guard let recipe, !recipe.isDownloadOnly else {
             launch(id, ytDlp: ytDlp, url: item.url, siteArguments: siteArguments)
             return
         }
@@ -497,10 +497,10 @@ final class DownloadQueue {
         }
     }
 
-    /// Replaces any learned entry for the same domain; curated entries are never touched.
+    /// Replaces any entry for the same domain that the learner may replace (see `SiteLearner.shouldLearn`).
     private func recordSite(_ entry: SiteConfig) {
         var all = siteStore.load()
-        all.removeAll { $0.isLearned && $0.overlaps(entry) }
+        all.removeAll { $0.overlaps(entry) && SiteLearner.shouldLearn($0) }
         all.append(entry)
         siteStore.save(all)
         sites = .load(from: siteStore.folder)

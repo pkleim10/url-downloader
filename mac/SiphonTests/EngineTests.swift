@@ -6,8 +6,8 @@ struct SiteRegistryTests {
     private let json = """
     {"sites": [
       {"id": "istock-media", "name": "iStock preview videos", "match": ["media.istockphoto.com"],
-       "method": "builtin", "status": "working", "ytDlpArgs": [], "plugin": null},
-      {"id": "example", "name": "Example", "match": ["example.com"], "ytDlpArgs": ["--referer", "https://example.com/"]}
+       "method": "builtin", "status": "working", "plugin": null},
+      {"id": "example", "name": "Example", "match": ["example.com"], "recipe": {"download": {"siteReferer": true}}}
     ]}
     """
 
@@ -20,7 +20,9 @@ struct SiteRegistryTests {
         #expect(sites.count == 2)
         #expect(sites[1].method == "builtin")
         #expect(sites[1].status == "untested")
-        #expect(sites[1].ytDlpArgs == ["--referer", "https://example.com/"])
+        #expect(sites[1].recipe?.isDownloadOnly == true)
+        #expect(sites[1].recipe?.downloadArguments(page: URL(string: "https://example.com/v/1")!)
+                == ["--add-headers", "Referer:https://example.com/"])
     }
 
     @Test func matchesDomainAndSubdomainsOnly() {
@@ -59,18 +61,18 @@ struct DownloadArgumentsTests {
 
     @Test func orderPutsPluginsAndSiteOptionsFirstAndUrlLast() throws {
         let site = try #require(SiteRegistry.decode(Data("""
-        {"sites": [{"id": "x", "match": ["x.com"], "ytDlpArgs": ["--referer", "https://x.com/"]}]}
+        {"sites": [{"id": "x", "match": ["x.com"], "recipe": {"download": {"impersonate": true}}}]}
         """.utf8)).first)
         let args = DownloadArguments.build(
             url: "https://x.com/v/1",
             prefix: "",
             destination: destination,
-            siteArguments: site.ytDlpArgs,
+            siteArguments: try #require(site.recipe).downloadArguments(page: URL(string: "https://x.com/v/1")!),
             pluginDirectory: URL(fileURLWithPath: "/tmp/plugins"),
             quality: .p1080
         )
         #expect(Array(args.prefix(6))
-                == ["--plugin-dirs", "/tmp/plugins"] + DownloadArguments.numberedTitleFix + ["--referer", "https://x.com/"])
+                == ["--plugin-dirs", "/tmp/plugins"] + DownloadArguments.numberedTitleFix + ["--impersonate", "chrome"])
         #expect(Array(args.suffix(2)) == ["--", "https://x.com/v/1"])
         let f = try #require(args.firstIndex(of: "-f"))
         #expect(args[f + 1].contains("height<=1080"))

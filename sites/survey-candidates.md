@@ -29,12 +29,12 @@ work, 2 broken, 5 untested (no public video), 8 offline. No plugins were needed.
 | PornoXO | recipe: playerConfig | 1280x720 H.264 |
 | Brighteon | recipe: playerConfig | 1280x720 H.264 |
 | SexVid | recipe: playerConfig | 1280x720 H.264 |
-| ZBPorn | recipe: playerConfig + pattern | 898x480 H.264 |
+| ZBPorn | recipe: playerConfig (reads the player's quality labels) | 898x480 H.264 |
 | PornDig | recipe: smartScan | 3840x2160 H.264 |
 | Tranny.one | recipe: pageSources | 1280x720 H.264 |
-| PornZog | recipe: link (to vxxx.com) | 1280x720 H.264 |
-| IcePorn | recipe: link (player API) | 854x480 H.264 |
-| PornDoe | recipe: link (player API) | 1280x720 H.264 (1080p is members-only) |
+| PornZog | recipe: embedPage (vxxx.com video page) | 1280x720 H.264 |
+| IcePorn | recipe: playerAPI | 854x480 H.264 |
+| PornDoe | custom recipe (its own data address; 1080p is members-only) | 1280x720 H.264 |
 | Fuq / PornHD / GotPorn | aggregator: /out/ links redirect to the host (xHamster, eporner, ...) | 1920x1080 H.264 via xHamster |
 
 ## Not working

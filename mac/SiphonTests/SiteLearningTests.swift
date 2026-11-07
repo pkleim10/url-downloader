@@ -72,15 +72,20 @@ struct SiteStoreTests {
 }
 
 struct SiteLearnerTests {
-    @Test func learnsUnknownAndLearnedSitesOnly() {
+    @Test func everyStandardEntryIsRetestedButHandWrittenStepsAreKept() {
         #expect(SiteLearner.shouldLearn(nil))
-        let curated = SiteConfig(id: "c", name: "c", match: ["c.com"], method: "builtin", status: "broken")
-        #expect(!SiteLearner.shouldLearn(curated))
-        var learned = curated
-        learned.source = "learned"
-        #expect(SiteLearner.shouldLearn(learned))
-        learned.status = "unsupported"
-        #expect(!SiteLearner.shouldLearn(learned))
+        var shipped = SiteConfig(id: "c", name: "c", match: ["c.com"], method: "builtin", status: "broken")
+        #expect(SiteLearner.shouldLearn(shipped))
+        shipped.recipe = .playerAPI
+        #expect(SiteLearner.shouldLearn(shipped))
+        shipped.recipe = SiteLearner.scanPage
+        #expect(SiteLearner.shouldLearn(shipped))
+        shipped.recipe = Recipe(link: .init(url: "/service/index.json"), media: .pattern, pattern: "(x)")
+        #expect(!SiteLearner.shouldLearn(shipped), "a hand-written recipe is reported, never replaced")
+        shipped.source = "learned"
+        #expect(SiteLearner.shouldLearn(shipped))
+        shipped.status = "unsupported"
+        #expect(!SiteLearner.shouldLearn(shipped))
     }
 
     @Test func domainDropsWwwAndMobilePrefixes() {
@@ -91,36 +96,43 @@ struct SiteLearnerTests {
 
     @Test func attemptsStartPlainThenFixesWithoutDuplicates() {
         let plain = SiteLearner.attempts(for: "https://example.com/v/1", existing: nil)
-        #expect(plain.first?.arguments == [])
-        #expect(plain.count == 8)
-        #expect(plain[2].arguments.contains("Referer:https://example.com/"))
+        #expect(plain.first?.recipe == nil)
+        #expect(plain.count == 10)
+        #expect(plain[1].recipe?.downloadArguments(page: URL(string: "https://example.com/v/1")!) == ["--impersonate", "chrome"])
+        #expect(plain[2].recipe?.downloadArguments(page: URL(string: "https://example.com/v/1")!)
+                == ["--impersonate", "chrome", "--add-headers", "Referer:https://example.com/"])
+        #expect(plain[3].recipe?.downloadArguments(page: URL(string: "https://example.com/v/1")!)
+                == ["--impersonate", "chrome", "--use-extractors", "generic"])
+        #expect(plain[1...3].allSatisfy { $0.recipe?.isDownloadOnly == true })
         #expect(plain[4].recipe == .followEmbed)
-        #expect(plain[5].recipe == .smartScan)
-        #expect(plain[6].recipe == .playerConfig)
-        #expect(plain[7].recipe == .pageSources)
-        #expect(plain.prefix(4).allSatisfy { $0.recipe == nil })
+        #expect(plain[5].recipe == .embedPage)
+        #expect(plain[6].recipe == .smartScan)
+        #expect(plain[7].recipe == .playerConfig)
+        #expect(plain[8].recipe == .pageSources)
+        #expect(plain[9].recipe == .playerAPI)
 
-        let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "options", status: "working",
-                               ytDlpArgs: ["--impersonate", "chrome"], source: "learned")
+        let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "recipe", status: "working",
+                               source: "learned", recipe: SiteLearner.impersonate)
         let again = SiteLearner.attempts(for: "https://example.com/v/1", existing: saved)
-        #expect(again.first?.arguments == ["--impersonate", "chrome"])
-        #expect(again.count == 8)
+        #expect(again.first?.recipe == SiteLearner.impersonate)
+        #expect(again.first?.label == "the saved recipe")
+        #expect(again.count == 10)
 
         let embedSite = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "recipe", status: "working",
                                    source: "learned", recipe: .followEmbed)
         let embedFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: embedSite)
-        #expect(embedFirst.first?.followEmbed == true)
-        #expect(embedFirst.count == 8)
+        #expect(embedFirst.first?.recipe == .followEmbed)
+        #expect(embedFirst.count == 10)
 
         let recipeSite = SiteConfig(id: "r", name: "r", match: ["example.com"], method: "recipe", status: "broken",
                                     recipe: Recipe(embed: .init(match: "player\\.example"), media: .sources))
         let recipeFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: recipeSite)
         #expect(recipeFirst.first?.recipe?.embed?.match == "player\\.example")
-        #expect(recipeFirst.count == 9)
+        #expect(recipeFirst.count == 11)
     }
 
     @Test func smartScanEntryRecordsRecipe() throws {
-        let attempt = SiteLearner.Attempt(label: "reading video sources", arguments: [], recipe: .smartScan)
+        let attempt = SiteLearner.Attempt(label: "reading video sources", recipe: .smartScan)
         let entry = try #require(SiteLearner.workingEntry(
             url: "https://hqporner.com/hdporn/1-x.html", attempt: attempt, extractor: "Generic",
             firstFailure: "Unsupported URL", testResult: "Downloaded", existing: nil,
@@ -131,7 +143,7 @@ struct SiteLearnerTests {
     }
 
     @Test func embedEntryIsRecordedAsRecipe() throws {
-        let attempt = SiteLearner.Attempt(label: "following the page's embedded player", arguments: [], recipe: .followEmbed)
+        let attempt = SiteLearner.Attempt(label: "following the page's embedded player", recipe: .followEmbed)
         let entry = try #require(SiteLearner.workingEntry(
             url: "https://puncher.tube/video/1/x.html", attempt: attempt, extractor: "Generic",
             firstFailure: "Unsupported URL", testResult: "Downloaded 74.8 MB", existing: nil,
@@ -143,7 +155,7 @@ struct SiteLearnerTests {
 
     @Test func successfulBuiltInRemembersWhatItObserved() throws {
         let observed = RecipeObservation(embedHost: "mydaddy.cc", titlePattern: "<title>(x)</title>")
-        let attempt = SiteLearner.Attempt(label: "reading video sources", arguments: [], recipe: .smartScan)
+        let attempt = SiteLearner.Attempt(label: "reading video sources", recipe: .smartScan)
         let entry = try #require(SiteLearner.workingEntry(
             url: "https://hqporner.com/hdporn/1-x.html", attempt: attempt, extractor: "Generic",
             firstFailure: "Unsupported URL", testResult: "Downloaded", existing: nil,
@@ -228,17 +240,17 @@ struct SiteLearnerTests {
         #expect(SiteLearner.classify("HTTP Error 403: Forbidden") == .site)
     }
 
-    @Test func workingEntryRecordsOptionsAndWhy() throws {
-        let attempt = SiteLearner.Attempt(label: "browser impersonation", arguments: ["--impersonate", "chrome"])
+    @Test func workingEntryRecordsDownloadRecipeAndWhy() throws {
+        let attempt = SiteLearner.Attempt(label: "browser impersonation", recipe: SiteLearner.impersonate)
         let entry = try #require(SiteLearner.workingEntry(
             url: "https://www.example.com/v/1", attempt: attempt, extractor: "Generic",
             firstFailure: "HTTP Error 403: Forbidden", testResult: "Downloaded 1 MB", existing: nil,
             date: Date(timeIntervalSince1970: 1_793_000_000)))
         #expect(entry.id == "example-com")
         #expect(entry.match == ["example.com"])
-        #expect(entry.method == "options")
+        #expect(entry.method == "recipe")
         #expect(entry.status == "working")
-        #expect(entry.ytDlpArgs == ["--impersonate", "chrome"])
+        #expect(entry.recipe == SiteLearner.impersonate)
         #expect(entry.isLearned)
         #expect(entry.notes?.contains("HTTP Error 403") == true)
         #expect(entry.exampleUrl == "https://www.example.com/v/1")
@@ -277,6 +289,15 @@ struct MediaProbeTests {
     @Test func noStreamsIsNotPlayable() {
         #expect(!MediaProbe.summarize(json: Data(#"{"streams":[]}"#.utf8), size: 10).playable)
         #expect(!MediaProbe.summarize(json: nil, size: 10).playable)
+    }
+
+    @Test func previewClipIsNotTheVideo() {
+        let clip = Data(#"{"streams":[{"codec_type":"video","codec_name":"h264","width":640,"height":360}],"format":{"duration":"0.6"}}"#.utf8)
+        let result = MediaProbe.summarize(json: clip, size: 40_000)
+        #expect(!result.playable)
+        #expect(result.summary.contains("preview"))
+        let song = Data(#"{"streams":[{"codec_type":"audio","codec_name":"aac"}],"format":{"duration":"3.0"}}"#.utf8)
+        #expect(MediaProbe.summarize(json: song, size: 40_000).playable)
     }
 
     @Test func parsesExtractorLine() {

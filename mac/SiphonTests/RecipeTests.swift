@@ -258,4 +258,50 @@ struct RecipeTests {
         #expect(SitesView.methodLabel(for: sites[0]) == "recipe (custom)")
         #expect(SitesView.methodLabel(for: sites[1]) == "recipe (followEmbed)")
     }
+
+    @Test func kvsLabelsPickTheOriginalOverAMeasuredLowFile() throws {
+        let page = URL(string: "https://zbporn.com/videos/606293/x/")!
+        let html = """
+        var a = {video_url: 'https://zbporn.com/get_file/28/aa/606000/606293/606293_360p.mp4/?br=651', postfix: '.mp4', video_url_text: 'High Quality'};
+        var b = {video_url: 'https://zbporn.com/get_file/28/bb/606000/606293/606293.mp4/?br=750', postfix: '.mp4', video_url_text: 'High Quality',
+                 video_alt_url: 'https://zbporn.com/get_file/28/aa/606000/606293/606293_360p.mp4/?br=651', video_alt_url_text: '360p'};
+        """
+        let files = RecipeRunner.labelledPlayerFiles(in: html, base: page)
+        #expect(files.map(\.height) == [360, nil])
+        #expect(files.map(\.label) == ["High Quality", "High Quality"])
+        let pick = try #require(RecipeRunner.choose(files, quality: .p720))
+        #expect(pick.url.absoluteString.contains("/606293.mp4/"))
+    }
+
+    @Test func playerDataListsFilesByQualityName() throws {
+        let data = #"{"title":"Bibi","files":{"lq":"https://gcdn.example.com/mp4_lq/9e.mp4?md5=a","hq":null,"4k":""}}"#
+        let sources = RecipeRunner.sources(in: data, base: URL(string: "https://www.iceporn.com/")!)
+        #expect(sources.map(\.label) == ["lq"])
+        #expect(RecipeRunner.jsonTitle(in: data) == "Bibi")
+        let both = #"{"files":{"lq":"https://c.example/a_lq.mp4","hq":"https://c.example/a_hq.mp4","4k":"https://c.example/a.mp4"}}"#
+        let pick = try #require(RecipeRunner.choose(RecipeRunner.sources(in: both, base: URL(string: "https://x.com/")!), quality: .p1080))
+        #expect(pick.label == "hq")
+        #expect(RecipeRunner.choose(RecipeRunner.sources(in: both, base: URL(string: "https://x.com/")!), quality: .best)?.label == "4k")
+    }
+
+    @Test func playerAddressesMapToTheirVideoPages() {
+        #expect(RecipeRunner.watchPage(for: URL(string: "https://vxxx.com/embed-1721143/?campaign=10121&source=")!)
+                == URL(string: "https://vxxx.com/video-1721143/"))
+        #expect(RecipeRunner.watchPage(for: URL(string: "https://example.com/embed/42")!) == URL(string: "https://example.com/video/42/"))
+        #expect(RecipeRunner.watchPage(for: URL(string: "https://pornzog.com/embed.php?id=28734086")!) == nil)
+    }
+
+    @Test func downloadOnlyRecipesCodeAndDescribeThemselves() throws {
+        let recipe = try JSONDecoder().decode(Recipe.self, from: Data(#"{"download":{"impersonate":true,"scanPage":true},"session":true}"#.utf8))
+        #expect(recipe.isDownloadOnly)
+        #expect(recipe.media == .page)
+        #expect(recipe.session == true)
+        #expect(recipe.details.map(\.label) == ["Download", "Session"])
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        #expect(String(decoding: try encoder.encode(recipe), as: UTF8.self)
+                == #"{"download":{"impersonate":true,"scanPage":true},"session":true}"#)
+        #expect(try JSONDecoder().decode(Recipe.self, from: Data(#"{"base":"playerAPI"}"#.utf8)) == .playerAPI)
+        #expect(Recipe.playerAPI.details.isEmpty && Recipe.embedPage.details.isEmpty)
+    }
 }

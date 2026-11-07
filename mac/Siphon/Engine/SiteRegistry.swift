@@ -7,7 +7,6 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     var match: [String]
     var method: String
     var status: String
-    var ytDlpArgs: [String]
     var plugin: String?
     var exampleUrl: String?
     var lastTested: String?
@@ -19,7 +18,7 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     var recipe: Recipe?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, match, method, status, ytDlpArgs, plugin, exampleUrl, lastTested, testResult, notes, source
+        case id, name, match, method, status, plugin, exampleUrl, lastTested, testResult, notes, source
         case recipe
     }
 
@@ -27,7 +26,7 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     private enum LegacyKeys: String, CodingKey { case followEmbed }
 
     init(id: String, name: String, match: [String], method: String, status: String,
-         ytDlpArgs: [String] = [], plugin: String? = nil, exampleUrl: String? = nil,
+         plugin: String? = nil, exampleUrl: String? = nil,
          lastTested: String? = nil, testResult: String? = nil, notes: String? = nil, source: String? = nil,
          recipe: Recipe? = nil) {
         self.recipe = recipe
@@ -36,7 +35,6 @@ struct SiteConfig: Codable, Identifiable, Equatable {
         self.match = match
         self.method = method
         self.status = status
-        self.ytDlpArgs = ytDlpArgs
         self.plugin = plugin
         self.exampleUrl = exampleUrl
         self.lastTested = lastTested
@@ -54,7 +52,6 @@ struct SiteConfig: Codable, Identifiable, Equatable {
         match = try c.decodeIfPresent([String].self, forKey: .match) ?? []
         method = try c.decodeIfPresent(String.self, forKey: .method) ?? "builtin"
         status = try c.decodeIfPresent(String.self, forKey: .status) ?? "untested"
-        ytDlpArgs = try c.decodeIfPresent([String].self, forKey: .ytDlpArgs) ?? []
         plugin = try c.decodeIfPresent(String.self, forKey: .plugin)
         exampleUrl = try c.decodeIfPresent(String.self, forKey: .exampleUrl)
         lastTested = try c.decodeIfPresent(String.self, forKey: .lastTested)

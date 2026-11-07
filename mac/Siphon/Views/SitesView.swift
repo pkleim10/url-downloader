@@ -44,10 +44,11 @@ struct SitesView: View {
         .frame(minWidth: 480, minHeight: 320)
     }
 
-    /// "recipe (smartScan)" for recipes built on a built-in, "recipe (custom)" otherwise.
+    /// "recipe (smartScan)" for recipes built on a built-in, "recipe (download settings)" for ones that
+    /// only change how yt-dlp downloads, "recipe (custom)" otherwise.
     static func methodLabel(for site: SiteConfig) -> String {
         guard let recipe = site.recipe else { return site.method }
-        return "\(site.method) (\(recipe.base ?? "custom"))"
+        return "\(site.method) (\(recipe.base ?? (recipe.isDownloadOnly ? "download settings" : "custom")))"
     }
 
     /// Sites sorted by name, filtered to those whose name, domains, method or status contain every word of `query`.
@@ -126,7 +127,6 @@ private struct SiteRow: View {
                         detail(line.label, line.value)
                     }
                 }
-                detail("yt-dlp options", site.ytDlpArgs.isEmpty ? "None" : site.ytDlpArgs.joined(separator: " "))
                 if let plugin = site.plugin { detail("Plugin", plugin) }
                 if let lastTested = site.lastTested { detail("Last tested", lastTested) }
                 if let testResult = site.testResult { detail("Test result", testResult) }

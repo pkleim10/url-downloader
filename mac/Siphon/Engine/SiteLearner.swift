@@ -5,12 +5,13 @@ import Foundation
 enum SiteLearner {
     struct Attempt: Equatable {
         let label: String
-        let arguments: [String]
-        /// Run a recipe to find the URL for yt-dlp instead of giving it the page.
+        /// nil gives yt-dlp the page as it is.
         var recipe: Recipe?
-
-        var followEmbed: Bool { recipe == .followEmbed }
     }
+
+    static let impersonate = Recipe(download: .init(impersonate: true))
+    static let impersonateWithReferer = Recipe(download: .init(impersonate: true, siteReferer: true))
+    static let scanPage = Recipe(download: .init(impersonate: true, scanPage: true))
 
     enum FailureKind: Equatable {
         /// Offline, timeouts, full disk: says nothing about the site.
@@ -24,11 +25,18 @@ enum SiteLearner {
         case site
     }
 
-    /// Sites with no entry are tested, and so are entries Siphon learned itself
-    /// (to refresh them or to try again after a failure). Curated entries are left alone.
+    /// Every download from a site is also a test of its entry, which is replaced when another fix
+    /// works better, unless the site is unsupported or its recipe has hand-written steps the
+    /// learner couldn't find again (those are reported, never overwritten).
     static func shouldLearn(_ site: SiteConfig?) -> Bool {
         guard let site else { return true }
-        return site.isLearned && site.status != "unsupported"
+        guard site.status != "unsupported" else { return false }
+        return site.isLearned || site.recipe.map(isStandard) ?? true
+    }
+
+    /// A recipe one of the learner's own fixes produces.
+    static func isStandard(_ recipe: Recipe) -> Bool {
+        plainAttempts.contains { $0.recipe == recipe }
     }
 
     /// Lowercased host without a leading "www." or "m.".
@@ -40,28 +48,27 @@ enum SiteLearner {
         return host
     }
 
-    /// Plain yt-dlp first (or the learned entry's options), then the automatic fixes in order.
+    /// The automatic fixes, plain yt-dlp first.
+    static let plainAttempts = [
+        Attempt(label: "yt-dlp's built-in support"),
+        Attempt(label: "browser impersonation", recipe: impersonate),
+        Attempt(label: "browser impersonation with the site as referer", recipe: impersonateWithReferer),
+        Attempt(label: "scanning the page for media", recipe: scanPage),
+        Attempt(label: "following the page's embedded player", recipe: .followEmbed),
+        Attempt(label: "giving yt-dlp the embedded player's own video page", recipe: .embedPage),
+        Attempt(label: "reading video sources from the embedded player", recipe: .smartScan),
+        Attempt(label: "finding the video in the page's player configuration", recipe: .playerConfig),
+        Attempt(label: "reading video sources from the page", recipe: .pageSources),
+        Attempt(label: "asking the site's player data address", recipe: .playerAPI),
+    ]
+
+    /// The saved recipe first, then the automatic fixes in order.
     static func attempts(for url: String, existing: SiteConfig?) -> [Attempt] {
-        let origin = URL(string: url).flatMap { u in u.scheme.flatMap { s in u.host.map { "\(s)://\($0)" } } } ?? ""
         var list: [Attempt] = []
-        if let existing, let recipe = existing.recipe {
-            list.append(Attempt(label: "the saved recipe", arguments: existing.ytDlpArgs, recipe: recipe))
-        } else if let existing, !existing.ytDlpArgs.isEmpty {
-            list.append(Attempt(label: "saved options", arguments: existing.ytDlpArgs))
-        }
-        list += [
-            Attempt(label: "yt-dlp's built-in support", arguments: []),
-            Attempt(label: "browser impersonation", arguments: ["--impersonate", "chrome"]),
-            Attempt(label: "browser impersonation with the site as referer",
-                    arguments: ["--impersonate", "chrome", "--add-headers", "Referer:\(origin)/"]),
-            Attempt(label: "scanning the page for media", arguments: ["--use-extractors", "generic", "--impersonate", "chrome"]),
-            Attempt(label: "following the page's embedded player", arguments: [], recipe: .followEmbed),
-            Attempt(label: "reading video sources from the embedded player", arguments: [], recipe: .smartScan),
-            Attempt(label: "finding the video in the page's player configuration", arguments: [], recipe: .playerConfig),
-            Attempt(label: "reading video sources from the page", arguments: [], recipe: .pageSources),
-        ]
+        if let recipe = existing?.recipe { list.append(Attempt(label: "the saved recipe", recipe: recipe)) }
+        list += plainAttempts
         var kept: [Attempt] = []
-        for attempt in list where !kept.contains(where: { $0.recipe == attempt.recipe && $0.arguments == attempt.arguments }) {
+        for attempt in list where !kept.contains(where: { $0.recipe == attempt.recipe }) {
             kept.append(attempt)
         }
         return kept
@@ -101,9 +108,15 @@ enum SiteLearner {
         let recipe = attempt.recipe.map { specialized($0, with: observed ?? RecipeObservation()) }
         let builtIn = attempt.recipe?.base
         var notes: String
-        if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments,
-           existing.recipe == recipe, let kept = existing.notes {
+        if let existing, existing.status == "working", existing.recipe == recipe, let kept = existing.notes {
             notes = kept
+        } else if builtIn == "embedPage" {
+            let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
+            let host = embedURL?.host.map { " from \($0)" } ?? ""
+            notes = "Learned by Siphon: \(before)The page embeds a player\(host) whose address yt-dlp doesn't recognise, but it recognises the player's own video page. Siphon finds the player on each page and gives \(handler) that video page."
+        } else if builtIn == "playerAPI" {
+            let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
+            notes = "Learned by Siphon: \(before)Neither the page nor a player on it lists the video; the player asks the site's player data address for it. Siphon asks that address too, picks the file that fits the Quality setting, and gives yt-dlp that file."
         } else if builtIn == "playerConfig" {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             notes = "Learned by Siphon: \(before)The video's address is in the page's player configuration (a script), which yt-dlp doesn't read. Siphon finds it under a common player key and gives yt-dlp that stream or file."
@@ -118,20 +131,20 @@ enum SiteLearner {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             let host = embedURL?.host.map { " from \($0)" } ?? ""
             notes = "Learned by Siphon: \(before)The page has no video of its own; it embeds a player\(host) in an iframe, which yt-dlp doesn't follow. Siphon finds that iframe on each page and passes the player's URL to \(handler), with the page as referer."
-        } else if attempt.arguments.isEmpty {
+        } else if attempt.recipe == nil {
             notes = "Learned by Siphon on first download: \(handler) handled it with no extra options."
         } else {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
-            notes = "Learned by Siphon: \(before)Retrying with \(attempt.label) (\(attempt.arguments.joined(separator: " "))) worked, so those options are now used for this site."
+            notes = "Learned by Siphon: \(before)Retrying with \(attempt.label) worked, so the site's recipe now downloads that way."
         }
         if let recipe, let attempted = attempt.recipe, recipe != attempted, !notes.contains("Remembered from the download:") {
             notes += " Remembered from the download: " + remembered(from: attempted, to: recipe) + "."
         }
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: recipe != nil ? "recipe" : attempt.arguments.isEmpty ? "builtin" : "options",
+            method: recipe != nil ? "recipe" : "builtin",
             status: "working",
-            ytDlpArgs: attempt.arguments, exampleUrl: existing?.exampleUrl ?? url,
+            exampleUrl: existing?.exampleUrl ?? url,
             lastTested: today(date), testResult: testResult, notes: notes, source: "learned",
             recipe: recipe
         )
@@ -195,11 +208,11 @@ enum SiteLearner {
             ? "The site's media is DRM-protected. Siphon doesn't circumvent DRM."
             : "Learned by Siphon: \(tried.map(\.label).joined(separator: ", ")) all failed. "
                 + (firstFailure.map { "First error: \($0). " } ?? "")
-                + "Needs a closer look: per-site options, browser cookies, or a plugin."
+                + "Needs a closer look: a new built-in recipe, the user's browser session, or a plugin."
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
             method: refused ? "unsupported" : "builtin", status: refused ? "unsupported" : "broken",
-            ytDlpArgs: [], exampleUrl: existing?.exampleUrl ?? url,
+            exampleUrl: existing?.exampleUrl ?? url,
             lastTested: today(date), testResult: "Failed: \(lastFailure)", notes: notes, source: "learned"
         )
     }

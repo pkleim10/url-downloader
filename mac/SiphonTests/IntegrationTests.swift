@@ -84,11 +84,13 @@ struct IntegrationTests {
         #expect(queue.sites.site(for: Self.sampleURL)?.id == learned.id)
     }
 
-    /// The sites that used to need plugins are bundled with a bare built-in recipe, and it still finds their video.
+    /// Sites that once needed a plugin or hand-tuned settings are bundled with a bare built-in recipe,
+    /// and it still finds their video.
     @Test(.timeLimit(.minutes(1)), arguments: [
         ("puncher-tube", "followEmbed"), ("hqporner-com", "smartScan"), ("ashemaletube-com", "playerConfig"),
+        ("zbporn-com", "playerConfig"), ("pornzog-com", "embedPage"), ("iceporn-com", "playerAPI"),
     ])
-    func formerPluginSitesResolveWithABuiltIn(id: String, base: String) async throws {
+    func formerlyTunedSitesResolveWithABuiltIn(id: String, base: String) async throws {
         let sitesFolder = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("sites", isDirectory: true)
@@ -109,6 +111,13 @@ struct IntegrationTests {
             #expect(video.videoID == "128512-wide_and_wet")
             #expect(video.url.path.hasSuffix(".mp4"), "\(video.url)")
             #expect(video.sourceLabel?.hasPrefix("720") == true, "\(video.sourceLabel ?? "-")")
+        case "zbporn-com":
+            #expect(video.url.absoluteString.contains("/606293.mp4/"), "\(video.url)")
+        case "pornzog-com":
+            #expect(video.url == URL(string: "https://vxxx.com/video-1721143/"), "\(video.url)")
+        case "iceporn-com":
+            #expect(video.url.host == "gcdn.iceporn.com", "\(video.url)")
+            #expect(video.title == "Bibi Tsunamy dando o cuzinho pela primeira vez na casa")
         default:
             #expect(video.url.host == "cdn.ashemaletube.com", "\(video.url)")
             #expect(video.title?.isEmpty == false)

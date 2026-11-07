@@ -47,8 +47,15 @@ enum MediaProbe {
             parts.append(String(format: "%.1f s", duration))
         }
         let detail = parts.isEmpty ? "" : ": " + parts.joined(separator: ", ")
+        if streams.contains(where: { $0.codec_type == "video" }),
+           let duration = probe.format?.duration.flatMap(Double.init), duration < shortestVideo {
+            return Result(playable: false, summary: "Downloaded \(Formatters.bytes(size))\(detail), too short to be the video; probably a preview clip (checked with ffprobe).")
+        }
         return Result(playable: true, summary: "Downloaded \(Formatters.bytes(size))\(detail) (checked with ffprobe).")
     }
+
+    /// Video shorter than this is taken for a preview clip rather than the video itself.
+    static let shortestVideo: Double = 8
 
     private static func codecName(_ name: String?) -> String {
         switch name?.lowercased() {
