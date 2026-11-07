@@ -8,6 +8,8 @@ struct SiteStore {
 
     var fileURL: URL { folder.appendingPathComponent("sites.json") }
     var pluginsURL: URL { folder.appendingPathComponent("plugins", isDirectory: true) }
+    /// Ids the user removed, with the `lastTested` they had, so the bundled copy doesn't bring them back.
+    var removedURL: URL { folder.appendingPathComponent("removed.json") }
 
     static var defaultFolder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -21,7 +23,7 @@ struct SiteStore {
         if let bundled {
             copyPlugins(from: bundled.appendingPathComponent("plugins", isDirectory: true))
             let shipped = SiteRegistry.load(from: bundled).sites
-            let merged = Self.merge(user: current, bundled: shipped)
+            let merged = Self.merge(user: current, bundled: shipped, removed: loadRemoved())
             // Also rewrites files in an older form (e.g. "embed" entries), since decoding normalizes them.
             if merged != current || (try? Data(contentsOf: fileURL)) != Self.encode(merged) {
                 save(merged)
@@ -47,11 +49,28 @@ struct SiteStore {
         try? data.write(to: fileURL, options: .atomic)
     }
 
+    /// Deletes the entry and remembers it, so the bundled copy only brings it back once a newer test ships.
+    func remove(_ id: String) {
+        var sites = load()
+        guard let index = sites.firstIndex(where: { $0.id == id }) else { return }
+        var removed = loadRemoved()
+        removed[id] = sites[index].lastTested ?? ""
+        sites.remove(at: index)
+        save(sites)
+        if let data = try? JSONEncoder().encode(removed) { try? data.write(to: removedURL, options: .atomic) }
+    }
+
+    func loadRemoved() -> [String: String] {
+        (try? Data(contentsOf: removedURL)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+    }
+
     /// A bundled entry replaces the entries it overlaps (same id or domain) unless one of
     /// them was tested more recently, so a fix Siphon learned survives an older shipped entry.
-    static func merge(user: [SiteConfig], bundled: [SiteConfig]) -> [SiteConfig] {
+    /// Entries the user removed stay out until the bundle ships one tested later.
+    static func merge(user: [SiteConfig], bundled: [SiteConfig], removed: [String: String] = [:]) -> [SiteConfig] {
         var result = user
         for entry in bundled {
+            if let removedTested = removed[entry.id], (entry.lastTested ?? "") <= removedTested { continue }
             let overlapping = result.indices.filter { result[$0].overlaps(entry) }
             guard let first = overlapping.first else {
                 result.append(entry)

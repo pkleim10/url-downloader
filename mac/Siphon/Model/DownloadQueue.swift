@@ -238,6 +238,11 @@ final class DownloadQueue {
 
     var sitesFolder: URL { siteStore.folder }
 
+    func removeSite(_ id: String) {
+        siteStore.remove(id)
+        sites = .load(from: siteStore.folder)
+    }
+
     // MARK: - Scheduling
 
     func scheduleDownloads() {

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Read-only view of the persistent `sites.json`: how each site is handled and when it was last tested.
+/// The persistent `sites.json`: how each site is handled and when it was last tested. Entries can be removed.
 struct SitesView: View {
     let queue: DownloadQueue
     @State private var query = ""
@@ -28,7 +28,9 @@ struct SitesView: View {
                             }
                         }
                         ForEach(shown) { site in
-                            SiteRow(site: site, pluginSource: queue.sites.pluginSource(for: site))
+                            SiteRow(site: site, pluginSource: queue.sites.pluginSource(for: site)) {
+                                withAnimation(.snappy) { queue.removeSite(site.id) }
+                            }
                         }
                     }
                     .padding(12)
@@ -108,8 +110,10 @@ private struct SharedPlayerNote: View {
 private struct SiteRow: View {
     let site: SiteConfig
     let pluginSource: String?
+    let onRemove: () -> Void
 
     @State private var expanded = false
+    @State private var hovering = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
@@ -154,11 +158,23 @@ private struct SiteRow: View {
                 Text(site.status.capitalized)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(statusColor)
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Remove this site's entry; Siphon tests the site again on its next download")
+                .opacity(hovering ? 1 : 0.55)
             }
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.snappy) { expanded.toggle() } }
         }
         .card(padding: 12, radius: 10)
+        .onHover { hovering = $0 }
     }
 
     private var statusColor: Color {

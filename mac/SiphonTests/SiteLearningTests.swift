@@ -26,6 +26,23 @@ struct SiteStoreTests {
         #expect(merged.first?.isLearned == false)
     }
 
+    @Test func removedEntryStaysOutUntilANewerOneShips() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SiteStore(folder: root)
+        store.save([site("a", "a.com", tested: "2026-11-01"), site("b", "b.com", tested: "2026-11-01")])
+        store.remove("a")
+        #expect(store.load().map(\.id) == ["b"])
+        #expect(store.loadRemoved() == ["a": "2026-11-01"])
+
+        let same = SiteStore.merge(user: store.load(), bundled: [site("a", "a.com", tested: "2026-11-01")],
+                                   removed: store.loadRemoved())
+        #expect(same.map(\.id) == ["b"])
+        let newer = SiteStore.merge(user: store.load(), bundled: [site("a", "a.com", tested: "2026-12-01")],
+                                    removed: store.loadRemoved())
+        #expect(newer.map(\.id) == ["b", "a"])
+    }
+
     @Test func fixLearnedAfterTheShippedEntrySurvivesMerge() {
         let merged = SiteStore.merge(
             user: [site("x-com", "x.com", tested: "2026-11-06", learned: true)],
