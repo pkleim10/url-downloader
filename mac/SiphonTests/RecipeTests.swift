@@ -139,6 +139,8 @@ struct RecipeTests {
     @Test func detailsListOnlyWhatDiffersFromTheBuiltIn() throws {
         #expect(Recipe.followEmbed.details.isEmpty)
         #expect(Recipe.playerConfig.details.isEmpty)
+        #expect(Recipe.builtIns.allSatisfy { !$0.description.contains("custom") })
+        #expect(Recipe(media: .ytdlp).description.hasPrefix("A custom recipe"))
 
         let hq = URL(string: "https://hqporner.com/hdporn/1-x.html")!
         let trim = try #require(RecipeRunner.titleTrim(in: "<title>Wide And Wet - HQporner.com</title>", page: hq))

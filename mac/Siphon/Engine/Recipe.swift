@@ -75,6 +75,20 @@ struct Recipe: Codable, Equatable {
         builtIns.first { $0.base == name }
     }
 
+    /// What the recipe does, in a sentence, for the Sites window.
+    var description: String {
+        switch base {
+        case "followEmbed":
+            "Finds the video player the page embeds from another site (an iframe) and gives its address to yt-dlp, with the page as referer."
+        case "smartScan":
+            "Opens the video player the page embeds from another site, undoes the JavaScript escaping in it, reads its video sources, and downloads the best one for the Quality setting."
+        case "playerConfig":
+            "Reads the page's player settings (a script, not markup) and gives yt-dlp the stream or video file listed under a common player key such as hlsAuto, hls, file or video_url."
+        default:
+            "A custom recipe; its steps are listed below."
+        }
+    }
+
     /// What this recipe sets beyond its built-in, as (label, value) lines for the Sites window.
     /// Recipes without a built-in list every step.
     var details: [(label: String, value: String)] {
