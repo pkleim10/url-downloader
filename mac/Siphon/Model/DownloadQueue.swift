@@ -18,6 +18,7 @@ final class DownloadQueue {
     @ObservationIgnored private var videoKeys: [UUID: String] = [:]
     /// Player iframes found for items on sites that embed another host's player.
     @ObservationIgnored private var embeds: [UUID: URL] = [:]
+    @ObservationIgnored private var observations: [UUID: RecipeObservation] = [:]
     /// The pending iframe lookup per item; a stale lookup (item paused or restarted) is ignored.
     @ObservationIgnored private var embedLookups: [UUID: UUID] = [:]
 
@@ -161,6 +162,7 @@ final class DownloadQueue {
         items[i].note = nil
         items[i].clearProgress()
         embeds[id] = nil
+        observations[id] = nil
         save()
         scheduleDownloads()
     }
@@ -171,6 +173,7 @@ final class DownloadQueue {
         logs[id] = nil
         videoKeys[id] = nil
         embeds[id] = nil
+        observations[id] = nil
         embedLookups[id] = nil
         items.removeAll { $0.id == id }
         save()
@@ -215,6 +218,7 @@ final class DownloadQueue {
         learning.removeAll()
         logs.removeAll()
         embeds.removeAll()
+        observations.removeAll()
         embedLookups.removeAll()
         items.removeAll()
         save()
@@ -275,6 +279,7 @@ final class DownloadQueue {
             appendLog(id, "--- Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)")
         }
 
+        observations[id] = nil
         guard let recipe else {
             launch(id, ytDlp: ytDlp, url: item.url, siteArguments: siteArguments)
             return
@@ -300,6 +305,7 @@ final class DownloadQueue {
             switch result {
             case .success(let resolution):
                 self.embeds[id] = resolution.embedURL
+                self.observations[id] = resolution.observed
                 if let embed = resolution.embedURL { self.appendLog(id, "--- Found the player: \(embed.absoluteString)") }
                 if let title = resolution.title { self.appendLog(id, "--- Title: \(title)") }
                 if recipe.media == .sources {
@@ -392,7 +398,8 @@ final class DownloadQueue {
             videoKeys[id] = nil
             if let state = learning.removeValue(forKey: id) {
                 items[i].note = "Checking the file…"
-                recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state, embedURL: embeds[id])
+                recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state, embedURL: embeds[id],
+                              observed: observations[id])
             }
         } else {
             attemptFailed(id, reason: YtDlpOutputParser.failureReason(from: lines, exitCode: exitCode))
@@ -435,7 +442,8 @@ final class DownloadQueue {
 
     // MARK: - Learning sites
 
-    private func recordSuccess(_ id: UUID, url: String, path: String?, state: LearningState, embedURL: URL?) {
+    private func recordSuccess(_ id: UUID, url: String, path: String?, state: LearningState, embedURL: URL?,
+                               observed: RecipeObservation?) {
         Task { [weak self] in
             let check = await MediaProbe.check(path: path)
             guard let self else { return }
@@ -444,7 +452,7 @@ final class DownloadQueue {
                 if let entry = SiteLearner.workingEntry(
                     url: url, attempt: state.current, extractor: state.extractor,
                     firstFailure: state.firstFailure, testResult: check.summary, existing: state.existing,
-                    embedURL: embedURL) {
+                    embedURL: embedURL, observed: observed) {
                     self.recordSite(entry)
                 }
                 if let i { self.items[i].note = state.existing == nil ? "Added to Sites" : "Sites entry updated" }

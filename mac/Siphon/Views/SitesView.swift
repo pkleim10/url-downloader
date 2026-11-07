@@ -22,6 +22,11 @@ struct SitesView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 8) {
+                        if query.isEmpty {
+                            ForEach(SiteLearner.sharedPlayers(in: queue.sites.sites)) { shared in
+                                SharedPlayerNote(shared: shared)
+                            }
+                        }
                         ForEach(shown) { site in
                             SiteRow(site: site, pluginSource: queue.sites.pluginSource(for: site))
                         }
@@ -70,6 +75,27 @@ struct SitesView: View {
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
         .padding(12)
+    }
+}
+
+private struct SharedPlayerNote: View {
+    let shared: SiteLearner.SharedPlayer
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "rectangle.3.group")
+                .foregroundStyle(Theme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Shared player: \(shared.host)")
+                    .font(.callout.weight(.semibold))
+                Text("\(shared.siteNames.formatted(.list(type: .and))) embed the same player. It may deserve its own built-in recipe.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .card(padding: 12, radius: 10)
     }
 }
 

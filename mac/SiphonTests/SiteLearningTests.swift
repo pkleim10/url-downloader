@@ -123,6 +123,44 @@ struct SiteLearnerTests {
         #expect(entry.notes?.contains("x-x-x.tube") == true)
     }
 
+    @Test func successfulBuiltInRemembersWhatItObserved() throws {
+        let observed = RecipeObservation(embedHost: "mydaddy.cc", titlePattern: "<title>(x)</title>")
+        let attempt = SiteLearner.Attempt(label: "reading video sources", arguments: [], recipe: .smartScan)
+        let entry = try #require(SiteLearner.workingEntry(
+            url: "https://hqporner.com/hdporn/1-x.html", attempt: attempt, extractor: "Generic",
+            firstFailure: "Unsupported URL", testResult: "Downloaded", existing: nil,
+            embedURL: URL(string: "https://mydaddy.cc/video/abc/"), observed: observed))
+        let recipe = try #require(entry.recipe)
+        #expect(recipe.base == "smartScan")
+        #expect(recipe.embed?.match == #"mydaddy\.cc/"#)
+        #expect(recipe.title == "<title>(x)</title>")
+        #expect(recipe.unescape == true && recipe.media == .sources)
+        #expect(entry.notes?.contains("Remembered from the download: the player iframe (mydaddy.cc/)") == true)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        #expect(String(decoding: try encoder.encode(recipe), as: UTF8.self)
+                == #"{"base":"smartScan","embed":{"match":"mydaddy\\.cc/"},"title":"<title>(x)</title>"}"#)
+
+        let pattern = Recipe.playerConfig.patterns![0]
+        let config = SiteLearner.specialized(.playerConfig, with: RecipeObservation(matchedPattern: pattern))
+        #expect(config.pattern == pattern)
+        #expect(SiteLearner.specialized(.followEmbed, with: RecipeObservation()) == .followEmbed)
+
+        let saved = SiteLearner.specialized(recipe, with: RecipeObservation(embedHost: "other.cc", titlePattern: "y"))
+        #expect(saved == recipe)
+    }
+
+    @Test func sharedPlayersNeedTwoWorkingSites() {
+        func site(_ name: String, _ match: String?, status: String = "working") -> SiteConfig {
+            SiteConfig(id: name, name: name, match: [name], method: "recipe", status: status,
+                       recipe: Recipe(base: "smartScan", embed: .init(match: match), unescape: true, media: .sources))
+        }
+        let sites = [site("b.com", #"mydaddy\.cc/"#), site("a.com", #"mydaddy\.cc/video/"#), site("c.com", #"x-x-x\.tube/embed/"#),
+                     site("d.com", #"x-x-x\.tube/"#, status: "broken"), site("e.com", nil)]
+        #expect(SiteLearner.sharedPlayers(in: sites) == [.init(host: "mydaddy.cc", siteNames: ["a.com", "b.com"])])
+    }
+
     @Test func legacyEmbedEntriesAreRewrittenAsRecipes() throws {
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("siphon-legacy-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: scratch) }

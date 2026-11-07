@@ -124,6 +124,22 @@ struct RecipeTests {
                 == "https://cdn.example.com/get_file/1/abc/720.mp4")
     }
 
+    @Test func titleTrimRemovesSiteNameFromTheEnd() throws {
+        let hq = URL(string: "https://hqporner.com/hdporn/1-x.html")!
+        let trim = try #require(RecipeRunner.titleTrim(in: "<html><title>Wide And Wet - HQporner.com</title>", page: hq))
+        #expect(trim.title == "Wide And Wet")
+        #expect(RecipeRunner.firstMatch(trim.pattern, in: "<title>Other Video - HQporner.com</title>") == "Other Video")
+
+        let dashes = try #require(RecipeRunner.titleTrim(in: "<title>Part 1 - The Return | HQporner.com</title>", page: hq))
+        #expect(dashes.title == "Part 1 - The Return")
+
+        let siteName = #"<meta property="og:site_name" content="aShemaleTube" /><title>Skinny ts takes bbc | aShemaleTube</title>"#
+        #expect(RecipeRunner.titleTrim(in: siteName, page: URL(string: "https://www.ashemaletube.com/videos/1/x/")!)?.title
+                == "Skinny ts takes bbc")
+
+        #expect(RecipeRunner.titleTrim(in: "<title>Just A Title</title>", page: hq) == nil)
+    }
+
     @Test func decodesSiteEntryAndMapsFollowEmbed() throws {
         let json = #"""
         {"sites":[

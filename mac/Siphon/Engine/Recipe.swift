@@ -190,6 +190,17 @@ struct RecipeResolution: Equatable {
     var sourceLabel: String?
     /// The player iframe the recipe followed, if any.
     var embedURL: URL?
+    /// What worked on this page, for the learner to remember (see `SiteLearner.specialized`).
+    var observed = RecipeObservation()
+}
+
+struct RecipeObservation: Equatable {
+    /// Host of the player iframe that was picked by scoring rather than by `embed.match`.
+    var embedHost: String?
+    /// The entry of `patterns` that found the media URL, when the recipe had no `pattern` of its own.
+    var matchedPattern: String?
+    /// A `title` regex that strips the site's name from the page title, checked on this page.
+    var titlePattern: String?
 }
 
 struct RecipeSource: Equatable {
@@ -216,8 +227,18 @@ enum RecipeRunner {
     static func resolve(page: URL, recipe: Recipe, quality: QualityPreset) async throws -> RecipeResolution {
         let mode = recipe.fetch ?? .auto
         let pageHTML = try await fetch(page, referer: nil, mode: mode)
-        let title = recipe.title.flatMap { firstMatch($0, in: pageHTML) }.map(cleanTitle)
-            ?? (recipe.media == .ytdlp ? nil : defaultTitle(in: pageHTML))
+        var observed = RecipeObservation()
+        var title = recipe.title.flatMap { firstMatch($0, in: pageHTML) }.map(cleanTitle)
+        if title == nil, recipe.media != .ytdlp {
+            let fallback = defaultTitle(in: pageHTML)
+            if let trim = titleTrim(in: pageHTML, page: page),
+               fallback.map({ $0.count > trim.title.count && $0.hasPrefix(trim.title) }) ?? true {
+                observed.titlePattern = trim.pattern
+                title = trim.title
+            } else {
+                title = fallback
+            }
+        }
         let videoID = pageID(page)
 
         var html = pageHTML
@@ -228,6 +249,7 @@ enum RecipeRunner {
                 ?? EmbedFinder.find(in: pageHTML, pageURL: page)
             guard let found else { throw RecipeError.noEmbed }
             embedURL = found
+            if embed.match == nil { observed.embedHost = found.host?.lowercased() }
             if recipe.media != .ytdlp {
                 html = try await fetch(found, referer: embed.referer == false ? nil : page.absoluteString, mode: mode)
                 base = found
@@ -238,20 +260,55 @@ enum RecipeRunner {
         switch recipe.media {
         case .ytdlp:
             guard let embedURL else { throw RecipeError.noEmbed }
-            return RecipeResolution(url: embedURL, referer: page.absoluteString, title: title, videoID: nil, embedURL: embedURL)
+            return RecipeResolution(url: embedURL, referer: page.absoluteString, title: title, videoID: nil,
+                                    embedURL: embedURL, observed: observed)
         case .sources:
             guard let source = choose(sources(in: html, base: base), quality: quality) else { throw RecipeError.noSources }
             return RecipeResolution(
                 url: source.url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
-                title: title, videoID: videoID, sourceLabel: source.label, embedURL: embedURL)
+                title: title, videoID: videoID, sourceLabel: source.label, embedURL: embedURL, observed: observed)
         case .pattern:
             let candidates = (recipe.pattern.map { [$0] } ?? []) + (recipe.patterns ?? [])
-            guard let url = candidates.lazy.compactMap({ firstMatch($0, in: html).flatMap { resolve($0, base: base) } }).first
-            else { throw RecipeError.noSources }
+            var found: URL?
+            for candidate in candidates {
+                if let url = firstMatch(candidate, in: html).flatMap({ resolve($0, base: base) }) {
+                    found = url
+                    if recipe.pattern == nil { observed.matchedPattern = candidate }
+                    break
+                }
+            }
+            guard let url = found else { throw RecipeError.noSources }
             return RecipeResolution(
                 url: url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
-                title: title, videoID: videoID, embedURL: embedURL)
+                title: title, videoID: videoID, embedURL: embedURL, observed: observed)
         }
+    }
+
+    static let titleSeparators = "-|–—:·•"
+
+    /// A `title` regex that removes the site's name (og:site_name, or the domain's main label)
+    /// from the end of the page's <title>, and the title it gives on this page. Keeps everything
+    /// before the last separator, so titles that contain a separator themselves stay whole.
+    static func titleTrim(in html: String, page: URL) -> (pattern: String, title: String)? {
+        guard let raw = firstMatch(#"<title[^>]*>([^<]+)</title>"#, in: html).map(cleanTitle), !raw.isEmpty else { return nil }
+        var names: [String] = []
+        if let site = firstMatch(#"<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)"#, in: html) {
+            names.append(cleanTitle(site))
+        }
+        if let host = page.host?.lowercased() {
+            let labels = host.split(separator: ".").map(String.init)
+            if labels.count >= 2 { names.append(labels[labels.count - 2]) }
+        }
+        let separators = "[" + NSRegularExpression.escapedPattern(for: titleSeparators) + "]"
+        let notSeparator = "[^" + NSRegularExpression.escapedPattern(for: titleSeparators) + "<]"
+        for name in names where name.count >= 3 {
+            let pattern = #"<title[^>]*>\s*([^<]*[^<\s])\s*"# + separators + #"\s*"# + notSeparator + "*"
+                + NSRegularExpression.escapedPattern(for: name) + #"[^<]*</title>"#
+            if let title = firstMatch(pattern, in: html).map(cleanTitle), !title.isEmpty, title.count < raw.count {
+                return (pattern, title)
+            }
+        }
+        return nil
     }
 
     /// yt-dlp options that apply a resolution: referer, and title/id when the URL is a bare file.

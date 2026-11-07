@@ -91,21 +91,23 @@ enum SiteLearner {
 
     static func workingEntry(url: String, attempt: Attempt, extractor: String?, firstFailure: String?,
                              testResult: String, existing: SiteConfig?, embedURL: URL? = nil,
-                             date: Date = Date()) -> SiteConfig? {
+                             observed: RecipeObservation? = nil, date: Date = Date()) -> SiteConfig? {
         guard let domain = domain(for: url) else { return nil }
         let handler = extractor.map { "yt-dlp's \($0) extractor" } ?? "yt-dlp"
-        let notes: String
+        let recipe = attempt.recipe.map { specialized($0, with: observed ?? RecipeObservation()) }
+        let builtIn = attempt.recipe?.base
+        var notes: String
         if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments,
-           existing.recipe == attempt.recipe, let kept = existing.notes {
+           existing.recipe == recipe, let kept = existing.notes {
             notes = kept
-        } else if attempt.recipe == .playerConfig {
+        } else if builtIn == "playerConfig" {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             notes = "Learned by Siphon: \(before)The video's address is in the page's player configuration (a script), which yt-dlp doesn't read. Siphon finds it under a common player key and gives yt-dlp that stream or file."
-        } else if attempt.recipe == .smartScan {
+        } else if builtIn == "smartScan" {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             let host = embedURL?.host.map { " from \($0)" } ?? ""
             notes = "Learned by Siphon: \(before)The page embeds a player\(host) that yt-dlp can't read directly. Siphon reads the player's video sources itself (undoing JavaScript escaping), picks the quality that fits the Quality setting, and gives yt-dlp that file."
-        } else if attempt.followEmbed {
+        } else if builtIn == "followEmbed" {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             let host = embedURL?.host.map { " from \($0)" } ?? ""
             notes = "Learned by Siphon: \(before)The page has no video of its own; it embeds a player\(host) in an iframe, which yt-dlp doesn't follow. Siphon finds that iframe on each page and passes the player's URL to \(handler), with the page as referer."
@@ -115,14 +117,65 @@ enum SiteLearner {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
             notes = "Learned by Siphon: \(before)Retrying with \(attempt.label) (\(attempt.arguments.joined(separator: " "))) worked, so those options are now used for this site."
         }
+        if let recipe, let attempted = attempt.recipe, recipe != attempted, !notes.contains("Remembered from the download:") {
+            notes += " Remembered from the download: " + remembered(from: attempted, to: recipe) + "."
+        }
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: attempt.recipe != nil ? "recipe" : attempt.arguments.isEmpty ? "builtin" : "options",
+            method: recipe != nil ? "recipe" : attempt.arguments.isEmpty ? "builtin" : "options",
             status: "working",
             ytDlpArgs: attempt.arguments, exampleUrl: existing?.exampleUrl ?? url,
             lastTested: today(date), testResult: testResult, notes: notes, source: "learned",
-            recipe: attempt.recipe
+            recipe: recipe
         )
+    }
+
+    /// Fills in what a successful download showed about the site, so the next download goes
+    /// straight to it: the player host picked by scoring, the player key that held the URL, and
+    /// a title trim checked on the page. Only empty fields are filled; nothing is guessed.
+    static func specialized(_ recipe: Recipe, with observed: RecipeObservation) -> Recipe {
+        var result = recipe
+        if result.embed != nil, result.embed?.match == nil, let host = observed.embedHost {
+            result.embed?.match = NSRegularExpression.escapedPattern(for: host) + "/"
+        }
+        if result.media == .pattern, result.pattern == nil, let pattern = observed.matchedPattern {
+            result.pattern = pattern
+        }
+        if result.title == nil, let title = observed.titlePattern {
+            result.title = title
+        }
+        return result
+    }
+
+    struct SharedPlayer: Equatable, Identifiable {
+        var host: String
+        var siteNames: [String]
+        var id: String { host }
+    }
+
+    /// Player hosts that two or more working sites embed. Each is a candidate for its own built-in,
+    /// which a person still writes and checks; Siphon only points it out.
+    static func sharedPlayers(in sites: [SiteConfig]) -> [SharedPlayer] {
+        var byHost: [String: [String]] = [:]
+        for site in sites where site.status == "working" {
+            guard let match = site.recipe?.embed?.match else { continue }
+            let host = match.replacingOccurrences(of: "\\", with: "")
+                .split(separator: "/").first.map(String.init)?.lowercased() ?? match
+            byHost[host, default: []].append(site.name)
+        }
+        return byHost.filter { $0.value.count >= 2 }
+            .map { SharedPlayer(host: $0.key, siteNames: $0.value.sorted { $0.localizedStandardCompare($1) == .orderedAscending }) }
+            .sorted { $0.host < $1.host }
+    }
+
+    private static func remembered(from attempted: Recipe, to recipe: Recipe) -> String {
+        var parts: [String] = []
+        if recipe.embed?.match != attempted.embed?.match, let match = recipe.embed?.match {
+            parts.append("the player iframe (\(match.replacingOccurrences(of: "\\", with: "")))")
+        }
+        if recipe.pattern != attempted.pattern { parts.append("the player-config key that held the video") }
+        if recipe.title != attempted.title { parts.append("how to remove the site's name from titles") }
+        return parts.joined(separator: ", ")
     }
 
     static func failedEntry(url: String, kind: FailureKind, tried: [Attempt], firstFailure: String?,
