@@ -97,9 +97,10 @@ struct RecipeTests {
         ]}
         """#
         let sites = SiteRegistry.decode(Data(json.utf8))
-        #expect(sites[0].effectiveRecipe == Recipe(embed: .init(match: #"mydaddy\.cc/video/"#, referer: true),
-                                                   unescape: true, media: .sources, title: "x(y)"))
-        #expect(sites[1].effectiveRecipe == .followEmbed)
-        #expect(sites[0].effectiveRecipe?.summary.contains("undo JavaScript escaping") == true)
+        #expect(sites[0].recipe == Recipe(embed: .init(match: #"mydaddy\.cc/video/"#, referer: true),
+                                          unescape: true, media: .sources, title: "x(y)"))
+        #expect(sites[1].recipe == .followEmbed)
+        #expect(sites[1].method == "recipe")
+        #expect(sites[0].recipe?.summary.contains("undo JavaScript escaping") == true)
     }
 }

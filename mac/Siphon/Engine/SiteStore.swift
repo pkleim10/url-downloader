@@ -22,7 +22,8 @@ struct SiteStore {
             copyPlugins(from: bundled.appendingPathComponent("plugins", isDirectory: true))
             let shipped = SiteRegistry.load(from: bundled).sites
             let merged = Self.merge(user: current, bundled: shipped)
-            if merged != current || !FileManager.default.fileExists(atPath: fileURL.path) {
+            // Also rewrites files in an older form (e.g. "embed" entries), since decoding normalizes them.
+            if merged != current || (try? Data(contentsOf: fileURL)) != Self.encode(merged) {
                 save(merged)
             }
         }
@@ -33,11 +34,15 @@ struct SiteStore {
         (try? Data(contentsOf: fileURL)).map(SiteRegistry.decode) ?? []
     }
 
-    func save(_ sites: [SiteConfig]) {
+    static func encode(_ sites: [SiteConfig]) -> Data? {
         struct File: Encodable { var sites: [SiteConfig] }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        guard let data = try? encoder.encode(File(sites: sites)) else { return }
+        return try? encoder.encode(File(sites: sites))
+    }
+
+    func save(_ sites: [SiteConfig]) {
+        guard let data = Self.encode(sites) else { return }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
     }

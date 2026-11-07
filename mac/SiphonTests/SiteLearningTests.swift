@@ -87,8 +87,8 @@ struct SiteLearnerTests {
         #expect(again.first?.arguments == ["--impersonate", "chrome"])
         #expect(again.count == 6)
 
-        let embedSite = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "embed", status: "working",
-                                   source: "learned", followEmbed: true)
+        let embedSite = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "recipe", status: "working",
+                                   source: "learned", recipe: .followEmbed)
         let embedFirst = SiteLearner.attempts(for: "https://example.com/v/1", existing: embedSite)
         #expect(embedFirst.first?.followEmbed == true)
         #expect(embedFirst.count == 6)
@@ -108,19 +108,39 @@ struct SiteLearnerTests {
             embedURL: URL(string: "https://mydaddy.cc/video/abc/")))
         #expect(entry.method == "recipe")
         #expect(entry.recipe == .smartScan)
-        #expect(entry.followEmbed == nil)
         #expect(entry.notes?.contains("mydaddy.cc") == true)
     }
 
-    @Test func embedEntryRecordsFollowEmbed() throws {
+    @Test func embedEntryIsRecordedAsRecipe() throws {
         let attempt = SiteLearner.Attempt(label: "following the page's embedded player", arguments: [], recipe: .followEmbed)
         let entry = try #require(SiteLearner.workingEntry(
             url: "https://puncher.tube/video/1/x.html", attempt: attempt, extractor: "Generic",
             firstFailure: "Unsupported URL", testResult: "Downloaded 74.8 MB", existing: nil,
             embedURL: URL(string: "https://x-x-x.tube/embed/270856/")))
-        #expect(entry.method == "embed")
-        #expect(entry.followEmbed == true)
+        #expect(entry.method == "recipe")
+        #expect(entry.recipe == .followEmbed)
         #expect(entry.notes?.contains("x-x-x.tube") == true)
+    }
+
+    @Test func legacyEmbedEntriesAreRewrittenAsRecipes() throws {
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("siphon-legacy-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let store = SiteStore(folder: scratch.appendingPathComponent("user"))
+        let bundled = scratch.appendingPathComponent("bundled")
+        try FileManager.default.createDirectory(at: store.folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: bundled, withIntermediateDirectories: true)
+        try Data(#"{"sites":[]}"#.utf8).write(to: bundled.appendingPathComponent("sites.json"))
+        try Data(#"""
+        {"sites":[{"id":"p","name":"P","match":["puncher.tube"],"method":"embed","status":"working",
+                   "source":"learned","followEmbed":true}]}
+        """#.utf8).write(to: store.fileURL)
+
+        let site = try #require(store.prepare(bundled: bundled).sites.first)
+        #expect(site.method == "recipe")
+        #expect(site.recipe == .followEmbed)
+        let rewritten = try String(contentsOf: store.fileURL, encoding: .utf8)
+        #expect(!rewritten.contains("followEmbed"))
+        #expect(rewritten.contains(#""media" : "ytdlp""#))
     }
 
     @Test func sitesWindowSortsByNameAndSearches() {

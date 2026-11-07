@@ -42,7 +42,7 @@ enum SiteLearner {
     static func attempts(for url: String, existing: SiteConfig?) -> [Attempt] {
         let origin = URL(string: url).flatMap { u in u.scheme.flatMap { s in u.host.map { "\(s)://\($0)" } } } ?? ""
         var list: [Attempt] = []
-        if let existing, let recipe = existing.effectiveRecipe {
+        if let existing, let recipe = existing.recipe {
             list.append(Attempt(label: "the saved recipe", arguments: existing.ytDlpArgs, recipe: recipe))
         } else if let existing, !existing.ytDlpArgs.isEmpty {
             list.append(Attempt(label: "saved options", arguments: existing.ytDlpArgs))
@@ -95,7 +95,7 @@ enum SiteLearner {
         let handler = extractor.map { "yt-dlp's \($0) extractor" } ?? "yt-dlp"
         let notes: String
         if let existing, existing.status == "working", existing.ytDlpArgs == attempt.arguments,
-           existing.effectiveRecipe == attempt.recipe, let kept = existing.notes {
+           existing.recipe == attempt.recipe, let kept = existing.notes {
             notes = kept
         } else if attempt.recipe == .smartScan {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
@@ -113,13 +113,11 @@ enum SiteLearner {
         }
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: attempt.followEmbed ? "embed" : attempt.recipe != nil ? "recipe"
-                : attempt.arguments.isEmpty ? "builtin" : "options",
+            method: attempt.recipe != nil ? "recipe" : attempt.arguments.isEmpty ? "builtin" : "options",
             status: "working",
             ytDlpArgs: attempt.arguments, exampleUrl: existing?.exampleUrl ?? url,
             lastTested: today(date), testResult: testResult, notes: notes, source: "learned",
-            followEmbed: attempt.followEmbed ? true : nil,
-            recipe: attempt.followEmbed ? nil : attempt.recipe
+            recipe: attempt.recipe
         )
     }
 

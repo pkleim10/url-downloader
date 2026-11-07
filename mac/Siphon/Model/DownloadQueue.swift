@@ -257,7 +257,7 @@ final class DownloadQueue {
             learning[id] = LearningState(attempts: SiteLearner.attempts(for: item.url, existing: site), existing: site)
         }
         let siteArguments = learning[id]?.current.arguments ?? site?.ytDlpArgs ?? []
-        let recipe = learning[id].map { $0.current.recipe } ?? site?.effectiveRecipe
+        let recipe = learning[id].map { $0.current.recipe } ?? site?.recipe
 
         items[i].status = .downloading
         items[i].siteName = site?.name

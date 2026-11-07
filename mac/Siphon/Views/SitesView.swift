@@ -84,7 +84,7 @@ private struct SiteRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 detail("Matches", site.match.joined(separator: ", "))
                 detail("Method", site.method)
-                if let recipe = site.effectiveRecipe {
+                if let recipe = site.recipe {
                     detail("Recipe", recipe.summary)
                 }
                 detail("yt-dlp options", site.ytDlpArgs.isEmpty ? "None" : site.ytDlpArgs.joined(separator: " "))

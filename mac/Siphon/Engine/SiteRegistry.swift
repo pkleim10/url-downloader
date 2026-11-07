@@ -15,21 +15,21 @@ struct SiteConfig: Codable, Identifiable, Equatable {
     var notes: String?
     /// "learned" for entries Siphon recorded itself; nil for entries shipped in the repo.
     var source: String?
-    /// The page only embeds another host's player in an iframe; download the iframe's URL instead.
-    var followEmbed: Bool?
     /// How Siphon finds the video itself before handing a URL to yt-dlp (see `Recipe`).
     var recipe: Recipe?
 
     enum CodingKeys: String, CodingKey {
         case id, name, match, method, status, ytDlpArgs, plugin, exampleUrl, lastTested, testResult, notes, source
-        case followEmbed, recipe
+        case recipe
     }
+
+    /// Read from older files only: `"method": "embed"` with `"followEmbed": true` is the follow-embed recipe.
+    private enum LegacyKeys: String, CodingKey { case followEmbed }
 
     init(id: String, name: String, match: [String], method: String, status: String,
          ytDlpArgs: [String] = [], plugin: String? = nil, exampleUrl: String? = nil,
          lastTested: String? = nil, testResult: String? = nil, notes: String? = nil, source: String? = nil,
-         followEmbed: Bool? = nil, recipe: Recipe? = nil) {
-        self.followEmbed = followEmbed
+         recipe: Recipe? = nil) {
         self.recipe = recipe
         self.id = id
         self.name = name
@@ -61,13 +61,12 @@ struct SiteConfig: Codable, Identifiable, Equatable {
         testResult = try c.decodeIfPresent(String.self, forKey: .testResult)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
         source = try c.decodeIfPresent(String.self, forKey: .source)
-        followEmbed = try c.decodeIfPresent(Bool.self, forKey: .followEmbed)
         recipe = try? c.decodeIfPresent(Recipe.self, forKey: .recipe)
-    }
-
-    /// The recipe to run, including the older `followEmbed` flag.
-    var effectiveRecipe: Recipe? {
-        recipe ?? (followEmbed == true ? .followEmbed : nil)
+        let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+        if recipe == nil, (try? legacy.decodeIfPresent(Bool.self, forKey: .followEmbed)) == true {
+            recipe = .followEmbed
+        }
+        if method == "embed" { method = "recipe" }
     }
 
     func overlaps(_ other: SiteConfig) -> Bool {
