@@ -20,10 +20,15 @@ struct SitesView: View {
                 ContentUnavailableView.search(text: query)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(shown) { site in
-                    SiteRow(site: site, pluginSource: queue.sites.pluginSource(for: site))
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(shown) { site in
+                            SiteRow(site: site, pluginSource: queue.sites.pluginSource(for: site))
+                        }
+                    }
+                    .padding(12)
                 }
-                .listStyle(.inset)
+                .background(Theme.pageBackground)
             }
             Divider()
             footer
@@ -72,9 +77,11 @@ private struct SiteRow: View {
     let site: SiteConfig
     let pluginSource: String?
 
+    @State private var expanded = false
+
     var body: some View {
-        DisclosureGroup {
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 6) {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 6) {
                 detail("Matches", site.match.joined(separator: ", "))
                 detail("Method", site.method)
                 if let recipe = site.effectiveRecipe {
@@ -87,7 +94,7 @@ private struct SiteRow: View {
                 if let notes = site.notes { detail("Notes", notes) }
                 if let example = site.exampleUrl { detail("Example", example) }
             }
-            .padding(.vertical, 6)
+            .padding(.top, 8)
             if let pluginSource {
                 ScrollView(.horizontal) {
                     Text(pluginSource)
@@ -113,7 +120,10 @@ private struct SiteRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(statusColor)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.snappy) { expanded.toggle() } }
         }
+        .card(padding: 12, radius: 10)
     }
 
     private var statusColor: Color {
@@ -126,13 +136,14 @@ private struct SiteRow: View {
     }
 
     private func detail(_ label: String, _ value: String) -> some View {
-        GridRow {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label)
                 .foregroundStyle(.secondary)
-                .gridColumnAlignment(.trailing)
+                .frame(width: 100, alignment: .trailing)
             Text(value)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.callout)
     }
