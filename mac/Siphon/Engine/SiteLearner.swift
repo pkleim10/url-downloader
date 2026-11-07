@@ -7,6 +7,11 @@ enum SiteLearner {
         let label: String
         /// nil gives yt-dlp the page as it is.
         var recipe: Recipe?
+
+        /// "Trying recipe: page scan", or "Trying yt-dlp's built-in support" for the one fix that isn't a recipe.
+        var progress: String {
+            recipe == nil ? "Trying \(label)" : "Trying recipe: \(label)"
+        }
     }
 
     static let impersonate = Recipe(download: .init(impersonate: true))
@@ -53,13 +58,13 @@ enum SiteLearner {
         Attempt(label: "yt-dlp's built-in support"),
         Attempt(label: "browser impersonation", recipe: impersonate),
         Attempt(label: "browser impersonation with the site as referer", recipe: impersonateWithReferer),
-        Attempt(label: "scanning the page for media", recipe: scanPage),
-        Attempt(label: "following the page's embedded player", recipe: .followEmbed),
-        Attempt(label: "giving yt-dlp the embedded player's own video page", recipe: .embedPage),
-        Attempt(label: "reading video sources from the embedded player", recipe: .smartScan),
-        Attempt(label: "finding the video in the page's player configuration", recipe: .playerConfig),
-        Attempt(label: "reading video sources from the page", recipe: .pageSources),
-        Attempt(label: "asking the site's player data address", recipe: .playerAPI),
+        Attempt(label: "page scan", recipe: scanPage),
+        Attempt(label: "embedded player", recipe: .followEmbed),
+        Attempt(label: "embedded player's video page", recipe: .embedPage),
+        Attempt(label: "embedded player's video sources", recipe: .smartScan),
+        Attempt(label: "page's player settings", recipe: .playerConfig),
+        Attempt(label: "page's video sources", recipe: .pageSources),
+        Attempt(label: "site's player data", recipe: .playerAPI),
     ]
 
     /// The saved recipe first, then the automatic fixes in order.
@@ -135,7 +140,7 @@ enum SiteLearner {
             notes = "Learned by Siphon on first download: \(handler) handled it with no extra options."
         } else {
             let before = firstFailure.map { "The plain download failed (\($0)). " } ?? ""
-            notes = "Learned by Siphon: \(before)Retrying with \(attempt.label) worked, so the site's recipe now downloads that way."
+            notes = "Learned by Siphon: \(before)The \(attempt.label) recipe worked, so it's now used for this site."
         }
         if let recipe, let attempted = attempt.recipe, recipe != attempted, !notes.contains("Remembered from the download:") {
             notes += " Remembered from the download: " + remembered(from: attempted, to: recipe) + "."

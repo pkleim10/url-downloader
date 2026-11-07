@@ -110,6 +110,8 @@ struct SiteLearnerTests {
         #expect(plain[7].recipe == .playerConfig)
         #expect(plain[8].recipe == .pageSources)
         #expect(plain[9].recipe == .playerAPI)
+        #expect(plain[0].progress == "Trying yt-dlp's built-in support")
+        #expect(plain[3].progress == "Trying recipe: page scan")
 
         let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "recipe", status: "working",
                                source: "learned", recipe: SiteLearner.impersonate)

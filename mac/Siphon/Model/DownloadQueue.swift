@@ -290,13 +290,13 @@ final class DownloadQueue {
         if let state = learning[id] {
             items[i].note = state.index == 0
                 ? (site == nil ? "New site: testing" : "Retesting site")
-                : "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
+                : state.current.progress
         } else {
             items[i].note = nil
         }
         if logs[id] != nil { appendLog(id, "") }
         if let state = learning[id], state.index > 0 {
-            appendLog(id, "--- Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)")
+            appendLog(id, "--- \(state.current.progress) (\(state.index) of \(state.attempts.count - 1))")
         }
 
         observations[id] = nil
@@ -439,7 +439,7 @@ final class DownloadQueue {
                 state.index += 1
                 learning[id] = state
                 items[i].status = .pending
-                items[i].note = "Trying fix \(state.index) of \(state.attempts.count - 1): \(state.current.label)"
+                items[i].note = state.current.progress
                 items[i].clearProgress()
                 save()
                 return

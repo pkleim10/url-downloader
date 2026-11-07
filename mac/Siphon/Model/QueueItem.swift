@@ -35,7 +35,7 @@ struct QueueItem: Identifiable, Codable, Equatable {
     var totalBytes: Int64?
     var speed: Double?
     var eta: Int?
-    /// What Siphon is doing about the site, e.g. "Trying fix 2 of 3"; not saved.
+    /// What Siphon is doing about the site, e.g. "Trying recipe: page scan"; not saved.
     var note: String?
 
     enum CodingKeys: String, CodingKey {
