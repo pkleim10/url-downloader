@@ -31,6 +31,8 @@ final class DownloadQueue {
     @ObservationIgnored private let bundledSites: URL?
     /// Items whose site is being tested: which attempts remain and what failed so far.
     @ObservationIgnored private var learning: [UUID: LearningState] = [:]
+    /// The fix that just downloaded a site, by domain, for downloads that start before its entry is saved.
+    @ObservationIgnored private var justWorked: [String: SiteLearner.Attempt] = [:]
 
     private struct LearningState {
         var attempts: [SiteLearner.Attempt]
@@ -261,10 +263,41 @@ final class DownloadQueue {
     // MARK: - Scheduling
 
     func scheduleDownloads() {
-        for id in QueueScheduler.itemsToStart(in: items, limit: AppSettings.maxConcurrent) {
+        let held = heldWhileLearning()
+        for i in items.indices where items[i].status == .pending {
+            let waiting = held.contains(items[i].id)
+            if waiting { items[i].note = "Waiting while Siphon finds a recipe for this site" }
+            else if items[i].note == "Waiting while Siphon finds a recipe for this site" { items[i].note = nil }
+        }
+        for id in QueueScheduler.itemsToStart(in: items, limit: AppSettings.maxConcurrent, holding: held) {
             start(id)
         }
         updateDockBadge()
+    }
+
+    /// Downloads that are testing fixes for a site, by domain, with the fix each is on, and
+    /// whether yt-dlp is already receiving the video with it.
+    private func sitesBeingLearned() -> [String: (attempt: SiteLearner.Attempt, receiving: Bool)] {
+        var result: [String: (attempt: SiteLearner.Attempt, receiving: Bool)] = [:]
+        for (id, state) in learning {
+            guard let item = items.first(where: { $0.id == id }), item.status == .downloading,
+                  let domain = SiteLearner.domain(for: item.url) else { continue }
+            let receiving = (item.downloadedBytes ?? 0) > 0
+            if result[domain]?.receiving != true { result[domain] = (state.current, receiving) }
+        }
+        return result
+    }
+
+    /// Pending items from a site another download is still finding a recipe for; they start once
+    /// it's receiving the video, with the recipe it's using, instead of testing every fix themselves.
+    private func heldWhileLearning() -> Set<UUID> {
+        let learningSites = sitesBeingLearned().filter { !$0.value.receiving }
+        guard !learningSites.isEmpty, AppSettings.learnSites else { return [] }
+        return Set(items.filter { item in
+            item.status == .pending && learning[item.id] == nil
+                && SiteLearner.domain(for: item.url).map { learningSites[$0] != nil } == true
+                && SiteLearner.shouldLearn(sites.site(for: item.url))
+        }.map(\.id))
     }
 
     private func start(_ id: UUID) {
@@ -278,7 +311,14 @@ final class DownloadQueue {
         let item = items[i]
         let site = sites.site(for: item.url)
         if learning[id] == nil, AppSettings.learnSites, SiteLearner.shouldLearn(site) {
-            learning[id] = LearningState(attempts: SiteLearner.attempts(for: item.url, existing: site), existing: site)
+            var attempts = SiteLearner.attempts(for: item.url, existing: site)
+            let domain = SiteLearner.domain(for: item.url)
+            let peer = domain.flatMap { sitesBeingLearned()[$0] }.flatMap { $0.receiving ? $0.attempt : nil }
+            if let first = peer ?? (site == nil ? domain.flatMap { justWorked[$0] } : nil) {
+                attempts.removeAll { $0.recipe == first.recipe }
+                attempts.insert(first, at: 0)
+            }
+            learning[id] = LearningState(attempts: attempts, existing: site)
         }
         let recipe = learning[id].map { $0.current.recipe } ?? site?.recipe
         let siteArguments = URL(string: item.url).map { page in recipe?.downloadArguments(page: page) ?? [] } ?? []
@@ -377,7 +417,9 @@ final class DownloadQueue {
             items[i].title = title
             save()
         case .progress(let progress):
+            let firstBytes = (items[i].downloadedBytes ?? 0) == 0 && (progress.downloadedBytes ?? 0) > 0
             items[i].downloadedBytes = progress.downloadedBytes
+            if firstBytes, learning[id] != nil { scheduleDownloads() }
             items[i].totalBytes = progress.totalBytes ?? progress.estimatedTotalBytes
             items[i].speed = progress.speed
             items[i].eta = progress.eta
@@ -417,6 +459,7 @@ final class DownloadQueue {
             }
             videoKeys[id] = nil
             if let state = learning.removeValue(forKey: id) {
+                if let domain = SiteLearner.domain(for: items[i].url) { justWorked[domain] = state.current }
                 items[i].note = "Checking the file…"
                 recordSuccess(id, url: items[i].url, path: items[i].filePath, state: state, embedURL: embeds[id],
                               observed: observations[id])

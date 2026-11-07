@@ -65,10 +65,10 @@ struct QueueItem: Identifiable, Codable, Equatable {
 
 /// Picks which pending items to start: oldest first, up to the free slots.
 enum QueueScheduler {
-    static func itemsToStart(in items: [QueueItem], limit: Int) -> [UUID] {
+    static func itemsToStart(in items: [QueueItem], limit: Int, holding held: Set<UUID> = []) -> [UUID] {
         let running = items.filter { $0.status == .downloading }.count
         let free = max(0, limit - running)
-        return Array(items.filter { $0.status == .pending }.prefix(free).map(\.id))
+        return Array(items.filter { $0.status == .pending && !held.contains($0.id) }.prefix(free).map(\.id))
     }
 }
 

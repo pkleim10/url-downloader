@@ -148,6 +148,11 @@ struct QueueTests {
         #expect(QueueScheduler.itemsToStart(in: items, limit: 1).isEmpty)
     }
 
+    @Test func schedulerSkipsHeldItemsForLaterOnes() {
+        let items = [item(.downloading), item(.pending), item(.pending)]
+        #expect(QueueScheduler.itemsToStart(in: items, limit: 2, holding: [items[1].id]) == [items[2].id])
+    }
+
     @Test func linkExtractorFindsOnlyWebLinks() {
         let text = """
         https://a.com/1  http://b.org/x?y=1
