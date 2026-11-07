@@ -34,8 +34,8 @@ struct LogView: View {
                 }
                 .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Theme.cardBorder))
-                .onAppear { proxy.scrollTo("end", anchor: .bottom) }
-                .onChange(of: lines.count) { proxy.scrollTo("end", anchor: .bottom) }
+                .onAppear { proxy.scrollTo("end", anchor: .bottomLeading) }
+                .onChange(of: lines.count) { proxy.scrollTo("end", anchor: .bottomLeading) }
             }
 
             HStack {
