@@ -22,14 +22,19 @@ enum QualityPreset: String, CaseIterable, Identifiable, Codable {
     var formatArguments: [String] {
         switch self {
         case .configFile: []
-        case .best: ["-f", "bv*+ba/b"]
-        case .p2160: ["-f", "bv*[height<=2160]+ba/b[height<=2160]/b"]
-        case .p1440: ["-f", "bv*[height<=1440]+ba/b[height<=1440]/b"]
-        case .p1080: ["-f", "bv*[height<=1080]+ba/b[height<=1080]/b"]
-        case .p720: ["-f", "bv*[height<=720]+ba/b[height<=720]/b"]
+        case .best: ["-f", Self.labelledHigh + "bv*+ba/b"]
+        case .p2160: ["-f", Self.labelledHigh + "bv*[height<=2160]+ba/b[height<=2160]/b"]
+        case .p1440: ["-f", Self.labelledHigh + "bv*[height<=1440]+ba/b[height<=1440]/b"]
+        case .p1080: ["-f", Self.labelledHigh + "bv*[height<=1080]+ba/b[height<=1080]/b"]
+        case .p720: ["-f", Self.labelledHigh + "bv*[height<=720]+ba/b[height<=720]/b"]
         case .audioOnly: ["-f", "ba/b", "-x"]
         }
     }
+
+    /// When a page's formats carry no height, yt-dlp ranks them by list order, so a player that
+    /// lists "HQ" before "LQ" downloads the low one. `[height<?1]` keeps only formats of unknown
+    /// height, so sites that report heights are unaffected.
+    private static let labelledHigh = "b[height<?1][format_id~='(?i)(^|_)(hq|high|hd)(_|$)']/"
 }
 
 enum DownloadArguments {

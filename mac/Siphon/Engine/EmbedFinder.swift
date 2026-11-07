@@ -33,6 +33,7 @@ enum EmbedFinder {
         for match in regex.matches(in: html, range: NSRange(location: 0, length: text.length)) {
             let tag = text.substring(with: match.range)
             guard let src = attribute("src", in: tag) ?? attribute("data-src", in: tag),
+                  !isScriptFragment(src),
                   let url = URL(string: src.replacingOccurrences(of: "&amp;", with: "&"), relativeTo: pageURL)?.absoluteURL,
                   let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
                   url.host != nil else { continue }
@@ -50,6 +51,11 @@ enum EmbedFinder {
             if score >= 2, score > (best?.score ?? 0) { best = (url, score) }
         }
         return best?.url
+    }
+
+    /// An iframe written by a script with its src still mid-concatenation (`...'+(promo ? ...`).
+    static func isScriptFragment(_ src: String) -> Bool {
+        ["'+", "+'", "\"+", "+\""].contains(where: src.contains)
     }
 
     private static func attribute(_ name: String, in tag: String) -> String? {

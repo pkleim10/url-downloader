@@ -3,7 +3,9 @@
     {
       "id": "istock-media",
       "name": "iStock preview videos",
-      "match": ["media.istockphoto.com"],
+      "match": [
+        "media.istockphoto.com"
+      ],
       "method": "builtin",
       "status": "working",
       "ytDlpArgs": [],
@@ -16,16 +18,663 @@
     {
       "id": "ashemaletube-com",
       "name": "aShemaleTube",
-      "match": ["ashemaletube.com"],
+      "match": [
+        "ashemaletube.com"
+      ],
       "method": "recipe",
       "status": "working",
       "ytDlpArgs": [],
       "plugin": null,
-      "recipe": { "base": "playerConfig" },
+      "recipe": {
+        "base": "playerConfig"
+      },
       "exampleUrl": "https://www.ashemaletube.com/videos/1265329/skinny-ts-takes-bbc/",
       "lastTested": "2026-11-06",
       "testResult": "The built-in playerConfig recipe alone resolved both test videos (1265329 and 900378) to their HLS streams, with titles from og:title. A 20-second sample downloaded with exactly its URL and options was H.264 852x480 with AAC audio, saved as \"Skinny ts takes bbc [skinny-ts-takes-bbc].mp4\"; every frame decoded cleanly. Earlier: the full 118 MB video (18:58) decoded, and a Cloudflare 403 fell back to the browser fetch and resolved in 8.6 s.",
       "notes": "yt-dlp has no extractor for this site. The page is behind a Cloudflare bot check that answers about a third of plain requests with HTTP 403 whatever their headers; yt-dlp itself gets 403 unless it impersonates a browser. The recipe fetches plainly and, on a 403 or challenge page, falls back to fetching through yt-dlp as desktop Chrome (Safari fingerprints never pass). The video is in the player config as sources.hlsAuto, an HLS master playlist (480p and 240p) on cdn.ashemaletube.com that needs no referer or cookies; the generic extractor can't read it because it's in a script, not markup, so the built-in playerConfig recipe (unescape the page, take the first stream or video URL under a common player key) finds it with no site-specific settings; the title comes from the page's og:title. This replaced a Python plugin, archived in sites/plugins-archive."
+    },
+    {
+      "id": "3movs-com",
+      "name": "3Movs",
+      "match": [
+        "3movs.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.3movs.com/videos/466748/this-cute-ebony-teen-student-wanted-a-job/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio (the High_Quality format).",
+      "notes": "yt-dlp has no extractor for 3Movs, but its generic extractor reads the KVS player settings. The formats carry no height, only the names High_Quality and Low_Quality, and yt-dlp ranks unnamed-height formats by list order, which picked the 360p one; Siphon's quality presets now prefer a format named HQ/high/HD when no format reports a height, which gives the 720p file."
+    },
+    {
+      "id": "analdin-com",
+      "name": "Analdin",
+      "match": [
+        "analdin.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.analdin.com/videos/813637/wife-teaches-husband-cuckold-therapy/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 960x540 with AAC audio.",
+      "notes": "yt-dlp has no extractor for Analdin. The page uses the KVS player, whose settings yt-dlp's generic extractor reads, with no extra options."
+    },
+    {
+      "id": "anysex-com",
+      "name": "AnySex",
+      "match": [
+        "anysex.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://anysex.com/video/528942/my-tall-blonde-stepsister-accidentally-found-out-i-get-a-hard-on-for-her/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1920x1080 with AAC audio.",
+      "notes": "yt-dlp has no extractor for AnySex; its generic extractor reads the page's HTML5 <video> sources, which are labelled with their heights."
+    },
+    {
+      "id": "bravotube-net",
+      "name": "BravoTube",
+      "match": [
+        "bravotube.net"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.bravotube.net/videos/lucky-the-head-doctor-toe-sucking-dick-slobber-wet-pussy-freak-of-florida-fucks-bbc-devin-drills/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio (the HQ source).",
+      "notes": "yt-dlp has no extractor for BravoTube; its generic extractor reads the two <source> tags (LQ and HQ, served from bravoporn.com). Neither reports a height, so plain yt-dlp took the last one listed (LQ, 360p); Siphon's quality presets prefer the format named HQ when no format reports a height."
+    },
+    {
+      "id": "katestube-com",
+      "name": "KatesTube",
+      "match": [
+        "katestube.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.katestube.com/videos/3790517/german-neighbor-girl-calls-the-tech-boy-over/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: AV1 1280x720 with AAC audio.",
+      "notes": "yt-dlp has no extractor for KatesTube. The page uses the KVS player, whose settings yt-dlp's generic extractor reads. The best format is AV1, which ffmpeg decodes; QuickTime plays AV1 only on Macs with an AV1 hardware decoder (M3 and later)."
+    },
+    {
+      "id": "perfectgirls-xxx",
+      "name": "PerfectGirls",
+      "match": [
+        "perfectgirls.xxx",
+        "perfectgirls.net"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.perfectgirls.xxx/video/803582/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio.",
+      "notes": "perfectgirls.net now redirects to perfectgirls.xxx. yt-dlp has no extractor for it; its generic extractor reads the page's HTML5 <video> sources."
+    },
+    {
+      "id": "porn300-com",
+      "name": "Porn300",
+      "match": [
+        "porn300.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.porn300.com/video/busty-beach-babe-picked-up-and-taken-home/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 640x360 with AAC audio.",
+      "notes": "yt-dlp has no extractor for Porn300; its generic extractor reads the page's single <source>, which is a 640x360 file (the only quality the page offers)."
+    },
+    {
+      "id": "porngo-com",
+      "name": "PornGo",
+      "match": [
+        "porngo.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.porngo.com/videos/2014215/julia-maze-gets-anal-fuck-backstage-with-leo-casanova-and-his-big-cock-part-1/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 854x480 with AAC audio.",
+      "notes": "yt-dlp has no extractor for PornGo; its generic extractor reads the page's HTML5 <video> sources."
+    },
+    {
+      "id": "pornhat-com",
+      "name": "PornHat",
+      "match": [
+        "pornhat.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.pornhat.com/video/vivian-takes-it-in-the-arse-for-cash/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 682x480 with AAC audio.",
+      "notes": "yt-dlp has no extractor for PornHat; its generic extractor reads the page's HTML5 <video> sources (labelled up to 720p; this video's 720p label is a 682x480 file)."
+    },
+    {
+      "id": "pornone-com",
+      "name": "PornOne (formerly vPorn)",
+      "match": [
+        "pornone.com",
+        "vporn.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://pornone.com/licking-pussy/abigail-morris-pawg-stretched-by-the-biggest-cock-with-girthmasterr/280978277/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1920x1080 with AAC audio.",
+      "notes": "vPorn became PornOne (the site's title says \"PornOne ex vPorn\"); vporn.com itself timed out (Cloudflare 522) on 2026-11-06. yt-dlp has no extractor for PornOne; its generic extractor reads the page's HTML5 <video> sources."
+    },
+    {
+      "id": "punishbang-com",
+      "name": "PunishBang",
+      "match": [
+        "punishbang.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.punishbang.com/video/9136/good-latex-doll-in-red-dress-gets/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x960 with AAC audio.",
+      "notes": "yt-dlp has no extractor for PunishBang. The page uses the KVS player, whose settings yt-dlp's generic extractor reads, with no extra options."
+    },
+    {
+      "id": "xbabe-com",
+      "name": "XBabe",
+      "match": [
+        "xbabe.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://xbabe.com/videos/blond-bombshell-sophie-savors-cock-in-public/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio.",
+      "notes": "yt-dlp has no extractor for XBabe; its generic extractor reads the page's HTML5 <video> sources."
+    },
+    {
+      "id": "xcafe-com",
+      "name": "XCafe",
+      "match": [
+        "xcafe.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://xcafe.com/351247/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio.",
+      "notes": "yt-dlp has no extractor for XCafe; its generic extractor reads the page's HTML5 <video> sources."
+    },
+    {
+      "id": "xozilla-com",
+      "name": "Xozilla",
+      "match": [
+        "xozilla.com"
+      ],
+      "method": "builtin",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.xozilla.com/videos/838850/zoey-skyy-craves-bbc-passion-with-busty-blonde-fire/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio.",
+      "notes": "yt-dlp has no extractor for Xozilla. The page uses the KVS player, whose settings yt-dlp's generic extractor reads, with no extra options."
+    },
+    {
+      "id": "boyfriendtv-com",
+      "name": "BoyfriendTV",
+      "match": [
+        "boyfriendtv.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "playerConfig"
+      },
+      "exampleUrl": "https://www.boyfriendtv.com/videos/1710557/korean-hunk-massage/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 3840x2160 with AAC audio, from the hlsAuto stream (480p to 4K).",
+      "notes": "yt-dlp has no extractor for BoyfriendTV: plain requests get a Cloudflare 403, and with impersonation the generic extractor finds nothing. The page's player config (the same player as aShemaleTube and PornoXO) lists sources.hlsAuto, an HLS master playlist, which the built-in playerConfig recipe finds; the recipe's fetch falls back to the browser fetch when Cloudflare answers 403."
+    },
+    {
+      "id": "pornoxo-com",
+      "name": "PornoXO",
+      "match": [
+        "pornoxo.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "playerConfig"
+      },
+      "exampleUrl": "https://www.pornoxo.com/videos/2977506/hot-lesbians-asshole-digging-pov-scenes-with-chanel-preston-dana-vespoli-bonnie-rotten/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio, from the hlsAuto stream.",
+      "notes": "yt-dlp's PornoXO extractor is marked broken and the generic one finds nothing. The page uses the same player as aShemaleTube and BoyfriendTV; its config lists sources.hlsAuto, which the built-in playerConfig recipe finds with no site-specific settings."
+    },
+    {
+      "id": "brighteon-com",
+      "name": "Brighteon",
+      "match": [
+        "brighteon.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "playerConfig"
+      },
+      "exampleUrl": "https://www.brighteon.com/824612de-2152-4501-b78c-0965ea21174c",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample downloaded (HLS, 16.7 s because of segment boundaries) and every frame decoded cleanly: H.264 1280x720 with AAC audio.",
+      "notes": "yt-dlp has no extractor for Brighteon; the generic extractor follows the page to its /embed/ page and gives up. The page's JSON lists the video as source[].src, an HLS playlist on video.brighteon.com, which the built-in playerConfig recipe finds."
+    },
+    {
+      "id": "sexvid-xxx",
+      "name": "SexVid",
+      "match": [
+        "sexvid.xxx"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "playerConfig"
+      },
+      "exampleUrl": "https://www.sexvid.xxx/hot-video-with-the-busty-arabian-porn-slut-mia-khalifa.html",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio (the 720p file; 480p also offered).",
+      "notes": "The page uses the KVS player, but yt-dlp's generic extractor fails to parse its settings (\"Unable to extract flashvars\": the template builds one value by string concatenation). The built-in playerConfig recipe reads video_url and video_alt_url directly; KVS URLs end in .mp4/?token, which playerConfig now accepts, and when every match names its height it picks the one that fits the Quality setting."
+    },
+    {
+      "id": "zbporn-com",
+      "name": "ZBPorn",
+      "match": [
+        "zbporn.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "playerConfig",
+        "pattern": "video_url:\\s*'(https?://[^']+/\\d+\\.mp4/[^']*)'"
+      },
+      "exampleUrl": "https://zbporn.com/videos/606293/young-indian-couples-swap-partners-for-swinger-sex/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 898x480 with AAC audio (the original file).",
+      "notes": "KVS player whose settings yt-dlp's generic extractor fails to parse (same concatenation problem as SexVid). The bare playerConfig recipe works but takes the first player block's 360p file; the page's second block names the original upload (606293.mp4, 480p here) under video_url without a height, so the recipe's pattern asks for the file without a resolution suffix."
+    },
+    {
+      "id": "porndig-com",
+      "name": "PornDig",
+      "match": [
+        "porndig.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "smartScan"
+      },
+      "exampleUrl": "https://www.porndig.com/videos/259420/barbie-feels-gets-all-wet-when-she-undresses-for-a-man.html",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 3840x2160 with AAC audio (Quality: Best).",
+      "notes": "yt-dlp has no extractor for PornDig, and its player iframe (videos.porndig.com/player/...) isn't one yt-dlp reads either. The player lists its files as a JSON source list (srcSet) with labels from 360p to 2160p, in both AV1 and H.264. The built-in smartScan recipe follows the iframe and reads that list; at equal height it prefers H.264, which every Mac decodes."
+    },
+    {
+      "id": "pornzog-com",
+      "name": "PornZog",
+      "match": [
+        "pornzog.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "link": {
+          "find": "vxxx\\.com/embed-(\\d+)",
+          "url": "https://vxxx.com/video-$1/"
+        },
+        "media": "ytdlp"
+      },
+      "exampleUrl": "https://pornzog.com/video/28734086/fabulous-adult-video-lesbian-best-youve-seen/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio, through yt-dlp's Txxx extractor.",
+      "notes": "PornZog plays its videos in a vxxx.com iframe (vxxx.com/embed-ID), an address yt-dlp doesn't recognise, although its Txxx extractor handles the same video at vxxx.com/video-ID/. The recipe's link step builds that address from the iframe's id and gives it to yt-dlp without the PornZog page as referer (the file server refuses a foreign referer)."
+    },
+    {
+      "id": "iceporn-com",
+      "name": "IcePorn",
+      "match": [
+        "iceporn.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "link": {
+          "find": "/video/(\\d+)",
+          "url": "https://www.iceporn.com/player_config_json/?vid=$1"
+        },
+        "unescape": true,
+        "media": "pattern",
+        "patterns": [
+          "\"4k\"\\s*:\\s*\"(https?://[^\"]+)\"",
+          "\"hq\"\\s*:\\s*\"(https?://[^\"]+)\"",
+          "\"lq\"\\s*:\\s*\"(https?://[^\"]+)\""
+        ],
+        "title": "<title>\\s*([^<]+?)\\s+-\\s+Porn Tube"
+      },
+      "exampleUrl": "https://www.iceporn.com/video/7418363/bibi-tsunamy-dando-o-cuzinho-pela-primeira-vez-na-casa",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 854x480 with AAC audio (this video has only the lq file).",
+      "notes": "yt-dlp has no extractor for IcePorn, and neither the page nor its embed contains the video: the player asks /player_config_json/?vid=ID, which answers with the files (4k, hq, lq) only when the request accepts JSON. The recipe's link step builds that address from the page URL's id, fetches it as JSON, and takes the best file listed; the title pattern drops the site's keyword tail."
+    },
+    {
+      "id": "porndoe-com",
+      "name": "PornDoe",
+      "match": [
+        "porndoe.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "link": {
+          "url": "/service/index.json?device=desktop&page=video"
+        },
+        "unescape": true,
+        "media": "pattern",
+        "pattern": "\"sources\"\\s*:\\s*\\{.*?\"mp4\"\\s*:\\s*\\[.*?\"link\"\\s*:\\s*\"(https?://[^\"]+)\"",
+        "title": "<title>\\s*([^<]+?)\\s+on\\s+PornDoe"
+      },
+      "exampleUrl": "https://porndoe.com/watch/pd2i6d1k1f1p",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio.",
+      "notes": "yt-dlp has no extractor for PornDoe, and the page has no video address: the player loads /service/index.json, which describes the video named by the referer. The recipe's link step fetches it with the page as referer and takes the first downloadable file of the regular mp4 list, 720p for guests. The list's 1080p entry links to the signup page, and a separate DeoVR list that exposes 1080p is deliberately not used: 1080p is for members."
+    },
+    {
+      "id": "tranny-one",
+      "name": "Tranny.one",
+      "match": [
+        "tranny.one"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "recipe": {
+        "base": "pageSources"
+      },
+      "exampleUrl": "https://www.tranny.one/view/1183967/",
+      "lastTested": "2026-11-06",
+      "testResult": "20-second sample (from 0:30) downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio (the \"high\" source).",
+      "notes": "yt-dlp's generic extractor reads this page as two videos (the player's low/high <source> tags plus a fallback <video> with the low file) and, with no heights, prefers the low one. The built-in pageSources recipe reads the page's own sources, ranks \"high\" above \"low\" and gives yt-dlp one file."
+    },
+    {
+      "id": "lindelltv-com",
+      "name": "LindellTV (Frank Speech)",
+      "match": [
+        "lindelltv.com",
+        "frankspeech.com"
+      ],
+      "method": "builtin",
+      "status": "broken",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://lindelltv.com/the-eric-metaxas-show-friday-november-6th-2026/",
+      "lastTested": "2026-11-06",
+      "testResult": "Failed: yt-dlp's RumbleEmbed extractor gets HTTP 403 for the video's metadata, with and without browser impersonation.",
+      "notes": "frankspeech.com now redirects to lindelltv.com, whose shows are Rumble embeds (Rumble(\"play\", {video: ...})). yt-dlp follows them to its Rumble extractor, but Rumble's embedJS endpoint answers with a Cloudflare challenge. This is a yt-dlp/Rumble problem, not a recipe one; retest after yt-dlp updates."
+    },
+    {
+      "id": "hanime-tv",
+      "name": "Hanime",
+      "match": [
+        "hanime.tv"
+      ],
+      "method": "builtin",
+      "status": "broken",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://hanime.tv/",
+      "lastTested": "2026-11-06",
+      "testResult": "Failed: the home page answers HTTP 403 (Cloudflare \"Just a moment...\") to plain requests and to yt-dlp impersonating desktop Chrome.",
+      "notes": "Cloudflare demands a real browser (JavaScript challenge), so no video page could be reached. The next step would be the user's browser cookies, which needs their approval."
+    },
+    {
+      "id": "fuq-com",
+      "name": "Fuq / PornHD / GotPorn",
+      "match": [
+        "fuq.com",
+        "pornhd.com",
+        "gotporn.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.fuq.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Not a video host: every video card is an /out/?l=... redirect to another site (e.g. eporner.com).",
+      "notes": "These three sites share one aggregator template and host no videos of their own. Give Siphon the video's own page (or the /out/ link, which redirects there); the hosting site's entry or yt-dlp extractor then applies."
+    },
+    {
+      "id": "bitview-net",
+      "name": "BitView",
+      "match": [
+        "bitview.net"
+      ],
+      "method": "builtin",
+      "status": "untested",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.bitview.net/",
+      "lastTested": "2026-11-06",
+      "testResult": "Not tested: the site shows \"Under Maintenance\" with no videos.",
+      "notes": "Retest when the site is back."
+    },
+    {
+      "id": "sendvid-com",
+      "name": "Sendvid",
+      "match": [
+        "sendvid.com"
+      ],
+      "method": "builtin",
+      "status": "untested",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://sendvid.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Not tested: the home page is an upload form and the public video list is empty.",
+      "notes": "Videos are shared by private links; test with one when available."
+    },
+    {
+      "id": "locals-com",
+      "name": "Locals",
+      "match": [
+        "locals.com"
+      ],
+      "method": "builtin",
+      "status": "untested",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://locals.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Not tested: the home page lists no public videos; creator communities are mostly behind a paid membership.",
+      "notes": "Members' videos would need the user's cookies (with approval)."
+    },
+    {
+      "id": "threads-com",
+      "name": "Threads",
+      "match": [
+        "threads.com",
+        "threads.net"
+      ],
+      "method": "builtin",
+      "status": "untested",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.threads.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Not tested: threads.net redirects to threads.com, whose home feed needs a login.",
+      "notes": "Test with a public post's URL."
+    },
+    {
+      "id": "clouthub-com",
+      "name": "CloutHub",
+      "match": [
+        "clouthub.com"
+      ],
+      "method": "builtin",
+      "status": "untested",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://new.clouthub.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Not tested: clouthub.com redirects to a WordPress landing page (new.clouthub.com) with no videos; the service is app-based now.",
+      "notes": "Retest with a shared video link if one turns up."
+    },
+    {
+      "id": "veoh-com",
+      "name": "Veoh",
+      "match": [
+        "veoh.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://veoh.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the www host no longer resolves (no DNS answer).",
+      "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "metacafe-com",
+      "name": "Metacafe",
+      "match": [
+        "metacafe.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://metacafe.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the domain no longer resolves.",
+      "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "utreon-com",
+      "name": "Utreon",
+      "match": [
+        "utreon.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://utreon.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the domain no longer resolves.",
+      "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "trovo-live",
+      "name": "Trovo",
+      "match": [
+        "trovo.live"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://trovo.live/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the domain no longer resolves.",
+      "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "streamja-com",
+      "name": "Streamja",
+      "match": [
+        "streamja.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://streamja.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the domain no longer resolves.",
+      "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "streamff-com",
+      "name": "Streamff",
+      "match": [
+        "streamff.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://streamff.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the server times out (Cloudflare 522).",
+      "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "shemaletubes-com",
+      "name": "ShemaleTubes",
+      "match": [
+        "shemaletubes.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://shemaletubes.com/",
+      "lastTested": "2026-11-06",
+      "testResult": "Offline on 2026-11-06: the domain is parked for sale (redirects to hugedomains.com).",
+      "notes": "The site appears to be gone; nothing to download."
     }
   ]
 }

@@ -158,6 +158,90 @@ struct RecipeTests {
         #expect(custom.details.last?.value == "<h1>(.+)</h1>")
     }
 
+    @Test func jsonSourceListPrefersH264AtEqualHeight() {
+        let html = #"""
+        {"codec":"av1","srcSet":[{"src":"https://cdn.example/v_av1_2160.mp4?e=1","type":"video/mp4; codecs=\"av01.0.05M.08\"","label":"2160p"},{"src":"https://cdn.example/v_av1_1080.mp4","type":"video/mp4; codecs=\"av01.0.05M.08\"","label":"1080p"}]},
+        {"codec":"h264","srcSet":[{"src":"https://cdn.example/v_h264_2160.mp4?e=1","type":"video/mp4; codecs=\"avc1.4d4015\"","label":"2160p"},{"src":"https://cdn.example/v_h264_1080.mp4","type":"video/mp4; codecs=\"avc1.4d4015\"","label":"1080p"}]}
+        """#
+        let sources = RecipeRunner.sources(in: RecipeRunner.unescape(html), base: URL(string: "https://example.com/")!)
+        #expect(sources.count == 4)
+        #expect(RecipeRunner.choose(sources, quality: .best)?.url.absoluteString == "https://cdn.example/v_h264_2160.mp4?e=1")
+        #expect(RecipeRunner.choose(sources, quality: .p1080)?.url.absoluteString == "https://cdn.example/v_h264_1080.mp4")
+    }
+
+    @Test func qualityWordsRankSourcesOfUnknownHeight() {
+        let html = #"""
+        <source src="https://cdn.example/1_360p.mp4/?br=529" title="LQ" /><source src="https://cdn.example/1_hq.mp4/?br=1996" title="HQ" />
+        """#
+        let sources = RecipeRunner.sources(in: html, base: URL(string: "https://example.com/")!)
+        #expect(RecipeRunner.choose(sources, quality: .best)?.label == "HQ")
+        #expect(RecipeRunner.choose(sources, quality: .p720)?.label == "HQ")
+        let words = #"<source src="https://cdn.example/a.mp4" label="low"><source src="https://cdn.example/b.mp4" label="high">"#
+        #expect(RecipeRunner.choose(RecipeRunner.sources(in: words, base: URL(string: "https://example.com/")!), quality: .best)?.label == "high")
+    }
+
+    @Test func heightIgnoresIDsInFileNames() {
+        #expect(RecipeRunner.height(in: URL(string: "https://e.com/get_file/1/a/92000/92390/92390_720p.mp4/?t=1")!) == 720)
+        #expect(RecipeRunner.height(in: URL(string: "https://e.com/606000/606293/606293.mp4/")!) == nil)
+        #expect(RecipeRunner.height(in: URL(string: "https://e.com/v/480x320_600k_h264_3164625.mp4")!) == nil)
+    }
+
+    @Test func playerConfigReadsKVSFlashvarsAndPicksByHeight() {
+        let html = #"""
+        var flashvars = { video_url: 'https://e.com/get_file/9/a/92000/92390/92390_480p.mp4/?v-acctoken=x', postfix: '_480p.mp4',
+        video_alt_url: 'https://e.com/get_file/9/b/92000/92390/92390_720p.mp4/?v-acctoken=y', video_alt_url_text: '720p' };
+        """#
+        let base = URL(string: "https://e.com/v/1")!
+        let found = Recipe.playerConfig.patterns!.lazy.compactMap {
+            RecipeRunner.choosePatternMatch($0, in: html, base: base, quality: .best)
+        }.first
+        #expect(found?.url.absoluteString == "https://e.com/get_file/9/b/92000/92390/92390_720p.mp4/?v-acctoken=y")
+        let limited = Recipe.playerConfig.patterns!.lazy.compactMap {
+            RecipeRunner.choosePatternMatch($0, in: html, base: base, quality: .p720)
+        }.first
+        #expect(limited?.height == 720)
+    }
+
+    @Test func linkBuildsURLFromPageURLOrPage() throws {
+        let page = URL(string: "https://www.iceporn.com/video/7418363/some-title")!
+        let api = Recipe.Link(find: #"/video/(\d+)"#, url: "https://www.iceporn.com/player_config_json/?vid=$1")
+        #expect(RecipeRunner.linkURL(api, page: page, html: "")?.absoluteString
+                == "https://www.iceporn.com/player_config_json/?vid=7418363")
+        let embed = Recipe.Link(find: #"vxxx\.com/embed-(\d+)"#, url: "https://vxxx.com/video-$1/")
+        #expect(RecipeRunner.linkURL(embed, page: page, html: #"<iframe src="https://vxxx.com/embed-1721143/?c=1">"#)?.absoluteString
+                == "https://vxxx.com/video-1721143/")
+        #expect(RecipeRunner.linkURL(embed, page: page, html: "no player") == nil)
+        let fixed = Recipe.Link(url: "/service/index.json?device=desktop")
+        #expect(RecipeRunner.linkURL(fixed, page: page, html: "")?.absoluteString == "https://www.iceporn.com/service/index.json?device=desktop")
+
+        let json = #"{"link":{"find":"vxxx\\.com/embed-(\\d+)","url":"https://vxxx.com/video-$1/"},"media":"ytdlp"}"#
+        let recipe = try JSONDecoder().decode(Recipe.self, from: Data(json.utf8))
+        #expect(recipe.link == embed)
+        #expect(recipe.details.first?.label == "Link")
+        let encoded = String(decoding: try JSONEncoder().encode(recipe), as: UTF8.self)
+        #expect(encoded.contains("\"link\""))
+    }
+
+    @Test func pageSourcesIsABuiltIn() throws {
+        let decoded = try JSONDecoder().decode(Recipe.self, from: Data(#"{"unescape":true,"media":"sources"}"#.utf8))
+        #expect(decoded == .pageSources)
+        #expect(Recipe.builtIn(named: "pageSources") == .pageSources)
+    }
+
+    @Test func scriptBuiltIframesAreSkipped() {
+        let page = URL(string: "https://zbporn.com/videos/1/x/")!
+        let html = #"<div class="player"><iframe src="https://ads.example/9/?zone=44'+(promo ? '&promo='+promo.pop() : '')+'" allowfullscreen></iframe></div>"#
+        #expect(EmbedFinder.find(in: html, pageURL: page) == nil)
+    }
+
+    @Test func formatPresetsPreferLabelledHighOnlyWithoutHeights() {
+        let format = QualityPreset.p1080.formatArguments
+        #expect(format.first == "-f")
+        #expect(format.last?.hasPrefix("b[height<?1][format_id~=") == true)
+        #expect(format.last?.hasSuffix("bv*[height<=1080]+ba/b[height<=1080]/b") == true)
+        #expect(QualityPreset.audioOnly.formatArguments == ["-f", "ba/b", "-x"])
+    }
+
     @Test func decodesSiteEntryAndMapsFollowEmbed() throws {
         let json = #"""
         {"sites":[

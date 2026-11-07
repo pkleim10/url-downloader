@@ -19,6 +19,16 @@ struct Recipe: Codable, Equatable {
         var referer: Bool?
     }
 
+    /// Builds the player or data URL from a value on the page, for sites whose player isn't an
+    /// iframe or that load their video list from a separate address.
+    struct Link: Codable, Equatable {
+        /// Regex with one capture group, tried on the page URL and then the page; nil for a fixed `url`.
+        var find: String?
+        /// The URL, with `$1` replaced by what `find` captured. Fetched with the page as referer;
+        /// with `media: ytdlp` it goes to yt-dlp without one, since it's usually the video's own page.
+        var url: String
+    }
+
     enum Media: String, Codable {
         /// Hand the (embed) URL to yt-dlp.
         case ytdlp
@@ -40,6 +50,8 @@ struct Recipe: Codable, Equatable {
     var fetch: Fetch?
     /// Follow the page's player iframe first.
     var embed: Embed?
+    /// Go to a URL built from the page instead of an iframe (`embed` is ignored when both are set).
+    var link: Link?
     /// Undo JavaScript string escaping (\" \/ \u0026) before reading the markup.
     var unescape: Bool?
     var media: Media
@@ -66,10 +78,13 @@ struct Recipe: Codable, Equatable {
         patterns: [
             #"["']?hlsAuto["']?\s*:\s*["'](https?://[^"'\s]+)["']"#,
             #"["']?(?:hls|hlsUrl|hls_url|hlsSource|m3u8|m3u8Url|m3u8_url)["']?\s*:\s*["'](https?://[^"'\s]+)["']"#,
-            #"["']?(?:file|video_url|videoUrl|video_src|videoSrc|contentUrl|mp4|mp4Url|src|source|url)["']?\s*:\s*["'](https?://[^"'\s]+\.(?:m3u8|mpd|mp4|webm)(?:\?[^"'\s]*)?)["']"#,
+            #"["']?(?:file|video_url|video_alt_url\d*|videoUrl|video_src|videoSrc|contentUrl|mp4|mp4Url|src|source|url)["']?\s*:\s*["'](https?://[^"'\s]+\.(?:m3u8|mpd|mp4|webm)/?(?:\?[^"'\s]*)?)["']"#,
         ])
 
-    static let builtIns = [followEmbed, smartScan, playerConfig]
+    /// Read video sources (tags or a JSON source list) straight out of the page itself.
+    static let pageSources = Recipe(base: "pageSources", unescape: true, media: .sources)
+
+    static let builtIns = [followEmbed, smartScan, playerConfig, pageSources]
 
     static func builtIn(named name: String) -> Recipe? {
         builtIns.first { $0.base == name }
@@ -84,6 +99,8 @@ struct Recipe: Codable, Equatable {
             "Opens the video player the page embeds from another site, undoes the JavaScript escaping in it, reads its video sources, and downloads the best one for the Quality setting."
         case "playerConfig":
             "Reads the page's player settings (a script, not markup) and gives yt-dlp the stream or video file listed under a common player key such as hlsAuto, hls, file or video_url."
+        case "pageSources":
+            "Reads the video sources listed in the page itself (its <source> tags or a JSON source list), picks the best one for the Quality setting, and gives yt-dlp that file."
         default:
             "A custom recipe; its steps are listed below."
         }
@@ -101,6 +118,9 @@ struct Recipe: Codable, Equatable {
             lines.append(("Player", embed.match.map { "iframe matching \($0.replacingOccurrences(of: "\\", with: ""))" }
                           ?? "most player-like iframe"))
             if embed.referer == false { lines.append(("Referer", "player fetched without the page as referer")) }
+        }
+        if link != base?.link, let link {
+            lines.append(("Link", link.find.map { "\(link.url), with $1 from \($0)" } ?? link.url))
         }
         if unescape != base?.unescape, unescape == true { lines.append(("Unescape", "undo JavaScript escaping")) }
         if media != base?.media {
@@ -137,14 +157,15 @@ struct Recipe: Codable, Equatable {
     // MARK: - Coding
 
     private enum CodingKeys: String, CodingKey {
-        case base, fetch, embed, unescape, media, pattern, patterns, title, mediaReferer
+        case base, fetch, embed, link, unescape, media, pattern, patterns, title, mediaReferer
     }
 
-    init(base: String? = nil, fetch: Fetch? = nil, embed: Embed? = nil, unescape: Bool? = nil, media: Media,
-         pattern: String? = nil, patterns: [String]? = nil, title: String? = nil, mediaReferer: Bool? = nil) {
+    init(base: String? = nil, fetch: Fetch? = nil, embed: Embed? = nil, link: Link? = nil, unescape: Bool? = nil,
+         media: Media, pattern: String? = nil, patterns: [String]? = nil, title: String? = nil, mediaReferer: Bool? = nil) {
         self.base = base
         self.fetch = fetch
         self.embed = embed
+        self.link = link
         self.unescape = unescape
         self.media = media
         self.pattern = pattern
@@ -167,6 +188,7 @@ struct Recipe: Codable, Equatable {
         self.base = baseName
         fetch = try c.decodeIfPresent(Fetch.self, forKey: .fetch) ?? base?.fetch
         embed = try c.decodeIfPresent(Embed.self, forKey: .embed) ?? base?.embed
+        link = try c.decodeIfPresent(Link.self, forKey: .link) ?? base?.link
         unescape = try c.decodeIfPresent(Bool.self, forKey: .unescape) ?? base?.unescape
         guard let media = try c.decodeIfPresent(Media.self, forKey: .media) ?? base?.media else {
             throw DecodingError.keyNotFound(CodingKeys.media, .init(codingPath: c.codingPath, debugDescription: "A recipe needs media or base"))
@@ -191,6 +213,7 @@ struct Recipe: Codable, Equatable {
         }
         try put(fetch, base?.fetch, .fetch)
         try put(embed, base?.embed, .embed)
+        try put(link, base?.link, .link)
         try put(unescape, base?.unescape, .unescape)
         try put(media, base?.media, .media)
         try put(pattern, base?.pattern, .pattern)
@@ -233,17 +256,21 @@ struct RecipeSource: Equatable {
     var url: URL
     var label: String?
     var height: Int?
+    /// False for AV1/HEVC sources, which lose ties to H.264.
+    var compatible = true
 }
 
 enum RecipeError: LocalizedError, Equatable {
     case pageUnavailable(String)
     case noEmbed
+    case noLink
     case noSources
 
     var errorDescription: String? {
         switch self {
         case .pageUnavailable(let detail): "Couldn't load the page: \(detail)"
         case .noEmbed: "No embedded player found on the page"
+        case .noLink: "The value the recipe's link needs isn't on the page"
         case .noSources: "No video sources found in the player"
         }
     }
@@ -270,7 +297,14 @@ enum RecipeRunner {
         var html = pageHTML
         var base = page
         var embedURL: URL?
-        if let embed = recipe.embed {
+        if let link = recipe.link {
+            guard let found = linkURL(link, page: page, html: pageHTML) else { throw RecipeError.noLink }
+            embedURL = found
+            if recipe.media != .ytdlp {
+                html = try await fetch(found, referer: page.absoluteString, mode: mode, accept: dataAccept)
+                base = found
+            }
+        } else if let embed = recipe.embed {
             let found = embed.match.map { iframe(matching: $0, in: pageHTML, base: page) }
                 ?? EmbedFinder.find(in: pageHTML, pageURL: page)
             guard let found else { throw RecipeError.noEmbed }
@@ -286,7 +320,7 @@ enum RecipeRunner {
         switch recipe.media {
         case .ytdlp:
             guard let embedURL else { throw RecipeError.noEmbed }
-            return RecipeResolution(url: embedURL, referer: page.absoluteString, title: title, videoID: nil,
+            return RecipeResolution(url: embedURL, referer: recipe.link == nil ? page.absoluteString : nil, title: title, videoID: nil,
                                     embedURL: embedURL, observed: observed)
         case .sources:
             guard let source = choose(sources(in: html, base: base), quality: quality) else { throw RecipeError.noSources }
@@ -295,18 +329,18 @@ enum RecipeRunner {
                 title: title, videoID: videoID, sourceLabel: source.label, embedURL: embedURL, observed: observed)
         case .pattern:
             let candidates = (recipe.pattern.map { [$0] } ?? []) + (recipe.patterns ?? [])
-            var found: URL?
+            var found: RecipeSource?
             for candidate in candidates {
-                if let url = firstMatch(candidate, in: html).flatMap({ resolve($0, base: base) }) {
-                    found = url
+                if let source = choosePatternMatch(candidate, in: html, base: base, quality: quality) {
+                    found = source
                     if recipe.pattern == nil { observed.matchedPattern = candidate }
                     break
                 }
             }
-            guard let url = found else { throw RecipeError.noSources }
+            guard let found else { throw RecipeError.noSources }
             return RecipeResolution(
-                url: url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
-                title: title, videoID: videoID, embedURL: embedURL, observed: observed)
+                url: found.url, referer: recipe.mediaReferer == true ? base.absoluteString : nil,
+                title: title, videoID: videoID, sourceLabel: found.label, embedURL: embedURL, observed: observed)
         }
     }
 
@@ -375,7 +409,8 @@ enum RecipeRunner {
         }
     }
 
-    /// <source> tags plus any <video src=...>, deduplicated, with the height read from the label or URL.
+    /// <source> tags, any <video src=...>, and JSON source lists (`{"src": …, "label": "720p"}`),
+    /// deduplicated, with the height read from the label or URL.
     static func sources(in html: String, base: URL) -> [RecipeSource] {
         var seen = Set<String>()
         var result: [RecipeSource] = []
@@ -384,14 +419,27 @@ enum RecipeRunner {
                   seen.insert(url.absoluteString).inserted else { continue }
             let label = attribute("title", in: tag) ?? attribute("label", in: tag) ?? attribute("res", in: tag)
                 ?? attribute("size", in: tag) ?? attribute("data-quality", in: tag)
-            let height = (label.flatMap { firstMatch(#"(\d{3,4})"#, in: $0) }
-                ?? firstMatch(#"(\d{3,4})p?\.(?:mp4|webm|m3u8)"#, in: url.path)).flatMap { Int($0) }
-            result.append(RecipeSource(url: url, label: label, height: height))
+            let height = label.flatMap { firstMatch(#"(\d{3,4})"#, in: $0) }.flatMap { Int($0) } ?? height(in: url)
+            result.append(RecipeSource(url: url, label: label, height: height, compatible: isCompatible(tag)))
+        }
+        for object in matches(jsonSourcePattern, in: html, group: 0) {
+            guard let src = firstMatch(#""(?:src|file|url|link)"\s*:\s*"(https?://[^"]+)""#, in: object),
+                  let url = resolve(src, base: base), seen.insert(url.absoluteString).inserted else { continue }
+            let label = firstMatch(#""(?:label|res|quality|name|height)"\s*:\s*"?([^",}]+)"#, in: object)
+            let height = label.flatMap { firstMatch(#"(\d{3,4})"#, in: $0) }.flatMap { Int($0) } ?? height(in: url)
+            result.append(RecipeSource(url: url, label: label, height: height, compatible: isCompatible(object)))
         }
         return result
     }
 
+    /// A JSON object (no nesting) that names a video file or stream under src/file/url/link.
+    private static let jsonSourcePattern =
+        #"\{[^{}]*"(?:src|file|url|link)"\s*:\s*"https?://[^"]+\.(?:mp4|webm|m3u8)[^"]*"[^{}]*\}"#
+
     /// The tallest source within the quality setting's limit; the tallest overall if none fit.
+    /// A source of unknown height labelled HQ/high/HD ranks above every measured one (players
+    /// that label sources that way give the low one its height, e.g. "LQ" for `_360p.mp4`).
+    /// Among equal heights, H.264 beats AV1 and HEVC, which not every Mac player decodes.
     static func choose(_ sources: [RecipeSource], quality: QualityPreset) -> RecipeSource? {
         let limit: Int? = switch quality {
         case .p2160: 2160
@@ -400,9 +448,57 @@ enum RecipeRunner {
         case .p720: 720
         case .configFile, .best, .audioOnly: nil
         }
-        let ranked = sources.sorted { ($0.height ?? 0) > ($1.height ?? 0) }
-        if let limit, let fit = ranked.first(where: { ($0.height ?? 0) <= limit && $0.height != nil }) { return fit }
+        func rank(_ source: RecipeSource) -> Int {
+            source.height ?? (labelledHigh(source.label) ? 100_000 : labelledLow(source.label) ? 1 : 0)
+        }
+        let ranked = sources.enumerated().sorted { a, b in
+            let (ra, rb) = (rank(a.element), rank(b.element))
+            if ra != rb { return ra > rb }
+            if a.element.compatible != b.element.compatible { return a.element.compatible }
+            return a.offset < b.offset
+        }.map(\.element)
+        if let limit, let fit = ranked.first(where: { source in
+            source.height.map { $0 <= limit } ?? labelledHigh(source.label)
+        }) { return fit }
         return ranked.first
+    }
+
+    private static func labelledHigh(_ label: String?) -> Bool {
+        label?.range(of: #"^\s*(hq|high|hd|high quality)\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    private static func labelledLow(_ label: String?) -> Bool {
+        label?.range(of: #"^\s*(lq|low|sd|low quality)\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// Every URL `pattern` captures; when there are several and each names its height, the one
+    /// that best fits the quality setting, otherwise the first.
+    static func choosePatternMatch(_ pattern: String, in html: String, base: URL, quality: QualityPreset) -> RecipeSource? {
+        var seen = Set<String>()
+        let found = matches(pattern, in: html, group: 1).compactMap { resolve($0, base: base) }
+            .filter { seen.insert($0.absoluteString).inserted }
+            .map { RecipeSource(url: $0, height: height(in: $0)) }
+        guard found.count > 1, found.allSatisfy({ $0.height != nil }) else { return found.first }
+        return choose(found, quality: quality)
+    }
+
+    /// "720" for ".../92390_720p.mp4/", nil for ".../606293.mp4" (an id, not a height).
+    static func height(in url: URL) -> Int? {
+        firstMatch(#"(?<!\d)(\d{3,4})p?\.(?:mp4|webm|m3u8)"#, in: url.path).flatMap(Int.init)
+            .flatMap { (144...4320).contains($0) ? $0 : nil }
+    }
+
+    private static func isCompatible(_ text: String) -> Bool {
+        text.range(of: #"av01|\bav1\b|hvc1|hev1|hevc"#, options: [.regularExpression, .caseInsensitive]) == nil
+    }
+
+    static func linkURL(_ link: Recipe.Link, page: URL, html: String) -> URL? {
+        var url = link.url
+        if let find = link.find {
+            guard let value = firstMatch(find, in: page.absoluteString) ?? firstMatch(find, in: html) else { return nil }
+            url = url.replacingOccurrences(of: "$1", with: value)
+        }
+        return resolve(url, base: page)
     }
 
     static func unescape(_ html: String) -> String {
@@ -442,6 +538,14 @@ enum RecipeRunner {
         return String(text[range])
     }
 
+    static func matches(_ pattern: String, in text: String, group: Int) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            guard match.numberOfRanges > group, let range = Range(match.range(at: group), in: text) else { return nil }
+            return String(text[range])
+        }
+    }
+
     private static func tags(_ name: String, in html: String) -> [String] {
         guard let regex = try? NSRegularExpression(pattern: "<\(name)\\b[^>]*>", options: [.caseInsensitive]) else { return [] }
         let text = html as NSString
@@ -459,10 +563,14 @@ enum RecipeRunner {
         return url
     }
 
-    private static func fetch(_ url: URL, referer: String?, mode: Recipe.Fetch) async throws -> String {
+    private static let pageAccept = "text/html,application/xhtml+xml"
+    /// For `link` URLs, which are often player APIs that answer only requests that accept JSON.
+    private static let dataAccept = "application/json, text/html;q=0.9, */*;q=0.8"
+
+    private static func fetch(_ url: URL, referer: String?, mode: Recipe.Fetch, accept: String = pageAccept) async throws -> String {
         if mode == .browser { return try await BrowserFetch.page(url, referer: referer) }
         do {
-            let html = try await plainFetch(url, referer: referer)
+            let html = try await plainFetch(url, referer: referer, accept: accept)
             if BrowserFetch.isChallenge(html) { return try await BrowserFetch.page(url, referer: referer) }
             return html
         } catch RecipeError.pageUnavailable(let detail) where detail == "HTTP 403" || detail == "HTTP 503" {
@@ -470,10 +578,10 @@ enum RecipeRunner {
         }
     }
 
-    private static func plainFetch(_ url: URL, referer: String?) async throws -> String {
+    private static func plainFetch(_ url: URL, referer: String?, accept: String) async throws -> String {
         var request = URLRequest(url: url, timeoutInterval: 20)
         request.setValue(EmbedFinder.userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
         let data: Data, response: URLResponse
         do {
