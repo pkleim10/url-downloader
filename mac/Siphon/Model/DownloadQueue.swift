@@ -328,15 +328,17 @@ final class DownloadQueue {
         items[i].failReason = nil
         items[i].clearProgress()
         if let state = learning[id] {
-            items[i].note = state.index == 0
-                ? (site == nil ? "New site: testing" : "Retesting site")
-                : state.current.progress
+            items[i].note = state.index > 0 ? state.current.progress
+                : site == nil && state.current.recipe == nil ? "New site: testing"
+                : state.current.applying
         } else {
             items[i].note = nil
         }
         if logs[id] != nil { appendLog(id, "") }
-        if let state = learning[id], state.index > 0 {
-            appendLog(id, "--- \(state.current.progress) (\(state.index) of \(state.attempts.count - 1))")
+        if let state = learning[id] {
+            appendLog(id, state.index > 0
+                ? "--- \(state.current.progress) (\(state.index) of \(state.attempts.count - 1))"
+                : "--- " + (items[i].note ?? state.current.applying))
         }
 
         observations[id] = nil

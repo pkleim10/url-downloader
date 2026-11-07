@@ -12,6 +12,19 @@ enum SiteLearner {
         var progress: String {
             recipe == nil ? "Trying \(label)" : "Trying recipe: \(label)"
         }
+
+        /// "Applying recipe: embedded player's video sources", for the recipe a site is expected to work with.
+        var applying: String {
+            guard let recipe else { return "Using \(label)" }
+            guard let name = SiteLearner.name(of: recipe) else { return "Applying the saved recipe" }
+            return "Applying recipe: \(name)"
+        }
+    }
+
+    /// The learner's name for a recipe, also for one specialized from a built-in.
+    static func name(of recipe: Recipe) -> String? {
+        plainAttempts.first { $0.recipe == recipe }?.label
+            ?? plainAttempts.first { $0.recipe?.base != nil && $0.recipe?.base == recipe.base }?.label
     }
 
     static let impersonate = Recipe(download: .init(impersonate: true))

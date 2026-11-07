@@ -112,6 +112,13 @@ struct SiteLearnerTests {
         #expect(plain[9].recipe == .playerAPI)
         #expect(plain[0].progress == "Trying yt-dlp's built-in support")
         #expect(plain[3].progress == "Trying recipe: page scan")
+        #expect(plain[0].applying == "Using yt-dlp's built-in support")
+        var learned = Recipe.smartScan
+        learned.embed = .init(match: "mydaddy\\.cc/")
+        #expect(SiteLearner.Attempt(label: "the saved recipe", recipe: learned).applying
+                == "Applying recipe: embedded player's video sources")
+        #expect(SiteLearner.Attempt(label: "the saved recipe", recipe: Recipe(media: .pattern, pattern: "x")).applying
+                == "Applying the saved recipe")
 
         let saved = SiteConfig(id: "e", name: "e", match: ["example.com"], method: "recipe", status: "working",
                                source: "learned", recipe: SiteLearner.impersonate)
