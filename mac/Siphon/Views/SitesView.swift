@@ -42,6 +42,12 @@ struct SitesView: View {
         .frame(minWidth: 480, minHeight: 320)
     }
 
+    /// "recipe (smartScan)" for recipes built on a built-in, "recipe (custom)" otherwise.
+    static func methodLabel(for site: SiteConfig) -> String {
+        guard let recipe = site.recipe else { return site.method }
+        return "\(site.method) (\(recipe.base ?? "custom"))"
+    }
+
     /// Sites sorted by name, filtered to those whose name, domains, method or status contain every word of `query`.
     static func visible(_ sites: [SiteConfig], matching query: String) -> [SiteConfig] {
         let words = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
@@ -109,10 +115,7 @@ private struct SiteRow: View {
         DisclosureGroup(isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 6) {
                 detail("Matches", site.match.joined(separator: ", "))
-                detail("Method", site.method)
-                if let recipe = site.recipe {
-                    detail("Recipe", recipe.summary)
-                }
+                detail("Method", SitesView.methodLabel(for: site))
                 detail("yt-dlp options", site.ytDlpArgs.isEmpty ? "None" : site.ytDlpArgs.joined(separator: " "))
                 if let plugin = site.plugin { detail("Plugin", plugin) }
                 if let lastTested = site.lastTested { detail("Last tested", lastTested) }

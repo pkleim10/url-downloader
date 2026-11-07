@@ -52,30 +52,6 @@ struct Recipe: Codable, Equatable {
     /// Send the page that listed the media as referer when downloading it.
     var mediaReferer: Bool?
 
-    /// The recipe's steps in plain words, for the Sites window.
-    var summary: String {
-        var steps: [String] = []
-        if let base, let builtIn = Self.builtIn(named: base) {
-            steps.append("built-in \"\(builtIn.displayName)\":")
-        }
-        if fetch == .browser { steps.append("fetch pages as desktop Chrome (through yt-dlp)") }
-        if let embed {
-            steps.append(embed.match.map { "open the player iframe matching \($0)" } ?? "open the most player-like iframe")
-            if media == .sources { steps.append(embed.referer == false ? "fetch it without a referer" : "fetch it with the page as referer") }
-        }
-        if unescape == true { steps.append("undo JavaScript escaping") }
-        switch media {
-        case .ytdlp: steps.append(embed == nil ? "give yt-dlp the page" : "give yt-dlp the player's URL")
-        case .sources: steps.append("pick the best video source for the Quality setting")
-        case .pattern:
-            if let pattern { steps.append("give yt-dlp the URL matching \(pattern)") }
-            if let patterns { steps.append("give yt-dlp the first URL found under \(patterns.count) common player-config keys") }
-        }
-        if let title { steps.append("title from \(title)") }
-        let text = steps.joined(separator: ", ").replacingOccurrences(of: ":,", with: ":") + "."
-        return text.prefix(1).uppercased() + text.dropFirst()
-    }
-
     // MARK: - Built-ins
 
     /// Download the page's player iframe with yt-dlp.
@@ -97,15 +73,6 @@ struct Recipe: Codable, Equatable {
 
     static func builtIn(named name: String) -> Recipe? {
         builtIns.first { $0.base == name }
-    }
-
-    var displayName: String {
-        switch base {
-        case "followEmbed": "follow the embedded player"
-        case "smartScan": "read the player's video sources"
-        case "playerConfig": "find the video in the player configuration"
-        default: base ?? "custom"
-        }
     }
 
     // MARK: - Coding

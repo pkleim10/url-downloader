@@ -195,6 +195,10 @@ struct SiteLearnerTests {
         #expect(SitesView.visible(sites, matching: "BROKEN").map(\.name) == ["eporner.com"])
         #expect(SitesView.visible(sites, matching: "builtin com").count == 4)
         #expect(SitesView.visible(sites, matching: "nothing").isEmpty)
+        #expect(SitesView.methodLabel(for: sites[0]) == "builtin")
+        let recipeSite = SiteConfig(id: "h", name: "H", match: ["h.com"], method: "recipe", status: "working",
+                                    recipe: Recipe(base: "smartScan", embed: .init(match: "x"), unescape: true, media: .sources))
+        #expect(SitesView.methodLabel(for: recipeSite) == "recipe (smartScan)")
     }
 
     @Test func classifiesFailures() {

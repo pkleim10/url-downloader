@@ -84,9 +84,7 @@ struct RecipeTests {
         let recipe = SiteRegistry.decode(Data(json.utf8)).first?.recipe
         #expect(recipe?.fetch == .browser)
         #expect(recipe?.media == .pattern)
-        #expect(recipe?.pattern == #""hlsAuto":"([^"]+)""#)
-        #expect(recipe?.summary.hasPrefix("Fetch pages as desktop Chrome") == true)
-    }
+        #expect(recipe?.pattern == #""hlsAuto":"([^"]+)""#)    }
 
     @Test func baseFillsMissingFieldsAndEncodesOnlyDifferences() throws {
         let json = #"{"base":"smartScan","embed":{"match":"mydaddy\\.cc/video/"},"title":"x(y)"}"#
@@ -98,9 +96,7 @@ struct RecipeTests {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         #expect(String(decoding: try encoder.encode(recipe), as: UTF8.self) == json)
-        #expect(String(decoding: try encoder.encode(Recipe.followEmbed), as: UTF8.self) == #"{"base":"followEmbed"}"#)
-        #expect(recipe.summary.hasPrefix(#"Built-in "read the player's video sources": open the player iframe"#))
-    }
+        #expect(String(decoding: try encoder.encode(Recipe.followEmbed), as: UTF8.self) == #"{"base":"followEmbed"}"#)    }
 
     @Test func writtenOutBuiltInIsRecognised() throws {
         let legacy = try JSONDecoder().decode(Recipe.self, from: Data(#"{"embed":{},"media":"ytdlp"}"#.utf8))
@@ -153,6 +149,7 @@ struct RecipeTests {
                                           unescape: true, media: .sources, title: "x(y)"))
         #expect(sites[1].recipe == .followEmbed)
         #expect(sites[1].method == "recipe")
-        #expect(sites[0].recipe?.summary.contains("undo JavaScript escaping") == true)
+        #expect(SitesView.methodLabel(for: sites[0]) == "recipe (custom)")
+        #expect(SitesView.methodLabel(for: sites[1]) == "recipe (followEmbed)")
     }
 }
