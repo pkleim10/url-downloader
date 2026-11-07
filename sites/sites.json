@@ -486,14 +486,14 @@
         "pornhd.com",
         "gotporn.com"
       ],
-      "method": "unsupported",
-      "status": "unsupported",
+      "method": "builtin",
+      "status": "working",
       "ytDlpArgs": [],
       "plugin": null,
       "exampleUrl": "https://www.fuq.com/",
       "lastTested": "2026-11-06",
-      "testResult": "Not a video host: every video card is an /out/?l=... redirect to another site (e.g. eporner.com).",
-      "notes": "These three sites share one aggregator template and host no videos of their own. Give Siphon the video's own page (or the /out/ link, which redirects there); the hosting site's entry or yt-dlp extractor then applies."
+      "testResult": "Followed one /out/ link from each site. Fuq and GotPorn went to xHamster; yt-dlp's XHamster extractor downloaded 20-second 1080p samples (H.264 1920x1080, AAC), and every frame decoded cleanly. PornHD's first link went to Lustery, a paid site, where only a 0.6-second 360p preview is public.",
+      "notes": "These three sites share one aggregator template and host no videos themselves. Each video card is an /out/?l=... link that redirects (HTTP) to the hosting site, mostly xHamster and eporner, and yt-dlp follows the redirect to that site's extractor, so the aggregator link can be given to Siphon as is, with no options. What downloads depends on the destination: links to paid sites such as Lustery lead to a public preview, and members' videos are not fetched."
     },
     {
       "id": "bitview-net",

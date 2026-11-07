@@ -4,8 +4,8 @@ Sites that yt-dlp 2026.10.26 has no extractor for (or a broken one). Each workin
 20-second sample of its home page's first video downloaded into `/tmp`, checked with `ffprobe`
 and a full `ffmpeg` decode, and deleted. Every site is recorded in `sites/sites.json`.
 
-Result: 24 working (14 by yt-dlp's generic extractor, 10 by recipes), 2 broken, 1 aggregator,
-5 untested (no public video), 8 offline. No plugins were needed.
+Result: 24 working (14 by yt-dlp's generic extractor, 10 by recipes), 3 aggregators whose links
+work, 2 broken, 5 untested (no public video), 8 offline. No plugins were needed.
 
 ## Working
 
@@ -35,6 +35,7 @@ Result: 24 working (14 by yt-dlp's generic extractor, 10 by recipes), 2 broken, 
 | PornZog | recipe: link (to vxxx.com) | 1280x720 H.264 |
 | IcePorn | recipe: link (player API) | 854x480 H.264 |
 | PornDoe | recipe: link (player API) | 1280x720 H.264 (1080p is members-only) |
+| Fuq / PornHD / GotPorn | aggregator: /out/ links redirect to the host (xHamster, eporner, ...) | 1920x1080 H.264 via xHamster |
 
 ## Not working
 
@@ -42,6 +43,5 @@ Result: 24 working (14 by yt-dlp's generic extractor, 10 by recipes), 2 broken, 
 |---|---|
 | LindellTV (Frank Speech) | broken: Rumble embeds; yt-dlp's Rumble extractor gets a Cloudflare 403 |
 | Hanime | broken: Cloudflare JavaScript challenge even with browser impersonation |
-| Fuq / PornHD / GotPorn | aggregator: links redirect to other hosts |
 | BitView, Sendvid, Locals, Threads, CloutHub | untested: maintenance, login, paywall or no public videos |
 | Veoh, Metacafe, Utreon, Trovo, Streamja, Streamff, ShemaleTubes | offline (no DNS, server down, or parked) |
