@@ -18,6 +18,8 @@ enum SiteLearner {
         /// One video is gone, private, or needs an account: says nothing about the site as a whole.
         case itemSpecific
         case drm
+        /// yt-dlp refuses the site as primarily used for piracy.
+        case piracy
         /// Worth trying the next fix.
         case site
     }
@@ -73,6 +75,7 @@ enum SiteLearner {
             "no space left", "read-only file system", "yt-dlp not found", "could not start yt-dlp",
         ]
         if local.contains(where: text.contains) { return .local }
+        if text.contains("used for piracy") || text.contains("[piracy]") { return .piracy }
         if text.contains("drm") { return .drm }
         let item = [
             "http error 404", "http error 410", "video unavailable", "private video", "has been removed",
@@ -185,15 +188,17 @@ enum SiteLearner {
     static func failedEntry(url: String, kind: FailureKind, tried: [Attempt], firstFailure: String?,
                             lastFailure: String, existing: SiteConfig?, date: Date = Date()) -> SiteConfig? {
         guard let domain = domain(for: url) else { return nil }
-        let drm = kind == .drm
-        let notes = drm
+        let refused = kind == .drm || kind == .piracy
+        let notes = kind == .piracy
+            ? "yt-dlp no longer supports this site because it has been determined to be primarily used for piracy. Siphon doesn't work around that."
+            : refused
             ? "The site's media is DRM-protected. Siphon doesn't circumvent DRM."
             : "Learned by Siphon: \(tried.map(\.label).joined(separator: ", ")) all failed. "
                 + (firstFailure.map { "First error: \($0). " } ?? "")
                 + "Needs a closer look: per-site options, browser cookies, or a plugin."
         return SiteConfig(
             id: existing?.id ?? id(for: domain), name: existing?.name ?? domain, match: existing?.match ?? [domain],
-            method: drm ? "unsupported" : "builtin", status: drm ? "unsupported" : "broken",
+            method: refused ? "unsupported" : "builtin", status: refused ? "unsupported" : "broken",
             ytDlpArgs: [], exampleUrl: existing?.exampleUrl ?? url,
             lastTested: today(date), testResult: "Failed: \(lastFailure)", notes: notes, source: "learned"
         )

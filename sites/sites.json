@@ -675,6 +675,21 @@
       "lastTested": "2026-11-06",
       "testResult": "Offline on 2026-11-06: the domain is parked for sale (redirects to hugedomains.com).",
       "notes": "The site appears to be gone; nothing to download."
+    },
+    {
+      "id": "sxyprn-com",
+      "name": "SxyPrn",
+      "match": [
+        "sxyprn.com"
+      ],
+      "method": "unsupported",
+      "status": "unsupported",
+      "ytDlpArgs": [],
+      "plugin": null,
+      "exampleUrl": "https://www.sxyprn.com/post/6aebc817e69e7.html",
+      "lastTested": "2026-11-06",
+      "testResult": "Not downloadable: yt-dlp refuses the site (\"[Piracy] This website is no longer supported since it has been determined to be primarily used for piracy\"), and the page answers HTTP 403 with a Cloudflare challenge.",
+      "notes": "yt-dlp lists sxyprn.com among its KnownPiracy sites and has dropped support. Siphon only supports legitimate sites and doesn't work around that decision or the bot check, so no options, recipe or plugin are attempted."
     }
   ]
 }

@@ -429,12 +429,16 @@ final class DownloadQueue {
                 return
             }
             learning[id] = nil
-            if kind == .site || kind == .drm,
+            if kind == .site || kind == .drm || kind == .piracy,
                let entry = SiteLearner.failedEntry(
                    url: items[i].url, kind: kind, tried: Array(state.attempts[...state.index]),
                    firstFailure: state.firstFailure, lastFailure: reason, existing: state.existing) {
                 recordSite(entry)
-                items[i].note = kind == .drm ? "Recorded in Sites as unsupported (DRM)" : "Recorded in Sites as broken"
+                items[i].note = switch kind {
+                case .drm: "Recorded in Sites as unsupported (DRM)"
+                case .piracy: "Recorded in Sites as unsupported (yt-dlp: piracy site)"
+                default: "Recorded in Sites as broken"
+                }
             } else {
                 items[i].note = nil
             }

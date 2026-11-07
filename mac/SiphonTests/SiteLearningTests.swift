@@ -222,6 +222,7 @@ struct SiteLearnerTests {
     @Test func classifiesFailures() {
         #expect(SiteLearner.classify("Unable to download webpage: <urlopen error [Errno 8] nodename nor servname provided>") == .local)
         #expect(SiteLearner.classify("This video is DRM protected") == .drm)
+        #expect(SiteLearner.classify("ERROR: [Piracy] This website is no longer supported since it has been determined to be primarily used for piracy.") == .piracy)
         #expect(SiteLearner.classify("[youtube] abc: Private video. Sign in if you've been granted access") == .itemSpecific)
         #expect(SiteLearner.classify("Unsupported URL: https://example.com/") == .site)
         #expect(SiteLearner.classify("HTTP Error 403: Forbidden") == .site)
