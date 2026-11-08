@@ -147,8 +147,8 @@ struct Recipe: Codable, Equatable {
     func downloadArguments(page: URL) -> [String] {
         var args: [String] = []
         if download?.impersonate == true { args += ["--impersonate", "chrome"] }
-        if download?.siteReferer == true, let scheme = page.scheme, let host = page.host {
-            args += ["--add-headers", "Referer:\(scheme)://\(host)/"]
+        if download?.siteReferer == true, let home = RecipeRunner.siteHome(of: page) {
+            args += ["--add-headers", "Referer:\(home)"]
         }
         if download?.scanPage == true { args += ["--use-extractors", "generic"] }
         return args
@@ -628,7 +628,9 @@ enum RecipeRunner {
         request.setValue(EmbedFinder.userAgent, forHTTPHeaderField: "User-Agent")
         if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
         guard let (_, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              let http = response as? HTTPURLResponse else { return true }
+        if http.statusCode == 404 || http.statusCode == 410 { return false }
+        guard (200..<300).contains(http.statusCode),
               let type = http.value(forHTTPHeaderField: "Content-Type") else { return true }
         return !type.lowercased().hasPrefix("text/html")
     }
@@ -749,7 +751,17 @@ enum RecipeRunner {
             return html
         } catch RecipeError.pageUnavailable(let detail) where detail.hasPrefix("HTTP 403 ") || detail.hasPrefix("HTTP 503 ") {
             return try await BrowserFetch.page(url, referer: referer)
+        } catch RecipeError.pageUnavailable(let detail) where detail.hasPrefix("HTTP 404 ") && referer == nil {
+            guard let home = siteHome(of: url) else { throw RecipeError.pageUnavailable(detail) }
+            return try await fetch(url, referer: home, mode: mode, accept: accept)
         }
+    }
+
+    /// Some sites answer 404 to a video page requested without a referer (HQporner), as if
+    /// it were gone; browsers arriving by a link always send one.
+    static func siteHome(of url: URL) -> String? {
+        guard let scheme = url.scheme, let host = url.host else { return nil }
+        return "\(scheme)://\(host)/"
     }
 
     private static func plainFetch(_ url: URL, referer: String?, accept: String) async throws -> String {

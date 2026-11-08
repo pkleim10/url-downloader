@@ -247,8 +247,9 @@ struct SiteLearnerTests {
         #expect(SiteLearner.classify("[youtube] abc: Private video. Sign in if you've been granted access") == .itemSpecific)
         #expect(SiteLearner.classify("Unsupported URL: https://example.com/") == .site)
         #expect(SiteLearner.classify("HTTP Error 403: Forbidden") == .site)
-        #expect(SiteLearner.classify("Couldn't load the page: HTTP 404 from mydaddy.cc") == .site)
-        #expect(SiteLearner.classify("Couldn't load the page: HTTP 404 from mydaddy.cc", savedRecipeWorked: true) == .itemSpecific)
+        #expect(SiteLearner.classify("Couldn't load the page: HTTP 404 from mydaddy.cc") == .missing)
+        #expect(SiteLearner.classify("[generic] -190749775_456243780: Unable to download webpage: HTTP Error 404: Not Found") == .missing)
+        #expect(SiteLearner.classify("HTTP Error 410: Gone") == .missing)
     }
 
     @Test func brokenEntryKeepsTheSavedRecipe() throws {

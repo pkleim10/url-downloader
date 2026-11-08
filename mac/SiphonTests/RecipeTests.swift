@@ -242,6 +242,13 @@ struct RecipeTests {
         #expect(QualityPreset.audioOnly.formatArguments == ["-f", "ba/b", "-x"])
     }
 
+    @Test func siteHomeIsTheRefererForPagesThatHideWithoutOne() throws {
+        let page = try #require(URL(string: "https://hqporner.com/hdporn/126100-you_got_all_a_dick_needs.html"))
+        #expect(RecipeRunner.siteHome(of: page) == "https://hqporner.com/")
+        #expect(Recipe(download: .init(siteReferer: true)).downloadArguments(page: page)
+                == ["--add-headers", "Referer:https://hqporner.com/"])
+    }
+
     @Test func plainFilesBeatStreamsAtEqualHeight() {
         #expect(QualityPreset.configFile.sortArguments == ["-S", "res,proto", "--check-formats"])
         #expect(QualityPreset.p720.sortArguments == ["-S", "res,proto", "--check-formats"])

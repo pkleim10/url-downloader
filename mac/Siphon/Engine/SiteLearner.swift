@@ -36,6 +36,8 @@ enum SiteLearner {
         case local
         /// One video is gone, private, or needs an account: says nothing about the site as a whole.
         case itemSpecific
+        /// Something answered 404/410: the video is gone only if its own page is (`pageIsGone`).
+        case missing
         case drm
         /// yt-dlp refuses the site as primarily used for piracy.
         case piracy
@@ -92,9 +94,7 @@ enum SiteLearner {
         return kept
     }
 
-    /// `savedRecipeWorked`: the failure came from a recipe that has already downloaded from this
-    /// site, so a missing page means this video is gone rather than the recipe being wrong.
-    static func classify(_ reason: String, savedRecipeWorked: Bool = false) -> FailureKind {
+    static func classify(_ reason: String) -> FailureKind {
         let text = reason.lowercased()
         let local = [
             "nodename nor servname", "network is unreachable", "timed out", "no route to host",
@@ -105,13 +105,28 @@ enum SiteLearner {
         if text.contains("used for piracy") || text.contains("[piracy]") { return .piracy }
         if text.contains("drm") { return .drm }
         let item = [
-            "http error 404", "http error 410", "video unavailable", "private video", "has been removed",
+            "video unavailable", "private video", "has been removed",
             "no longer available", "sign in", "log in", "login", "logged-in", "members-only", "age-restricted",
             "--cookies",
         ]
         if item.contains(where: text.contains) { return .itemSpecific }
-        if savedRecipeWorked, text.contains("http 404") || text.contains("http 410") { return .itemSpecific }
+        let missing = ["http error 404", "http error 410", "http 404", "http 410"]
+        if missing.contains(where: text.contains) { return .missing }
         return .site
+    }
+
+    /// Whether the video's own page answers 404 or 410. A missing file or player behind a page
+    /// that still loads is a recipe problem, not a gone video.
+    static func pageIsGone(_ page: URL) async -> Bool {
+        for referer in [nil, RecipeRunner.siteHome(of: page)] {
+            var request = URLRequest(url: page, timeoutInterval: 20)
+            request.setValue(EmbedFinder.userAgent, forHTTPHeaderField: "User-Agent")
+            if let referer { request.setValue(referer, forHTTPHeaderField: "Referer") }
+            guard let (_, response) = try? await URLSession.shared.data(for: request),
+                  let status = (response as? HTTPURLResponse)?.statusCode else { return false }
+            if status != 404 && status != 410 { return false }
+        }
+        return true
     }
 
     static func today(_ date: Date = Date()) -> String {

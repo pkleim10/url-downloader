@@ -64,7 +64,7 @@
       "exampleUrl": "https://hqporner.com/hdporn/128512-wide_and_wet.html",
       "lastTested": "2026-11-06",
       "testResult": "The built-in smartScan recipe alone found the mydaddy.cc player, read its 360p, 720p60 and 1080p60 sources and picked 1080.mp4 on bigcdn.cc, titled \"Wide And Wet\" with id 128512-wide_and_wet. A 20-second sample was H.264 1920x1080 with AAC audio; every frame decoded cleanly.",
-      "notes": "yt-dlp has no hqporner extractor and the generic extractor reports Unsupported URL: the page iframes a player from mydaddy.cc, which returns an empty page without an hqporner referer and writes its <video> tag from a JavaScript string with every quote escaped, so yt-dlp's HTML5 parser sees garbled extensions (mp4\\\") and refuses them. The built-in smartScan recipe fetches the iframe with the page as referer, undoes the escaping, reads the <source> qualities and gives yt-dlp the tallest that fits the Quality setting; its default title trim already gives the clean title. The video files need no referer or cookies. This replaced a Python plugin, archived in sites/plugins-archive."
+      "notes": "yt-dlp has no hqporner extractor and the generic extractor reports Unsupported URL: the page iframes a player from mydaddy.cc, which returns an empty page without an hqporner referer and writes its <video> tag from a JavaScript string with every quote escaped, so yt-dlp's HTML5 parser sees garbled extensions (mp4\\\") and refuses them. The built-in smartScan recipe fetches the iframe with the page as referer, undoes the escaping, reads the <source> qualities and gives yt-dlp the tallest that fits the Quality setting; its default title trim already gives the clean title. The video files need no referer or cookies, but their links expire within a minute of reading the player, so they must be downloaded straight away (Siphon starts yt-dlp as soon as the recipe resolves). Some video pages (126100) answer 404 \"Oops, page not found!\" when requested without a referer, while browsers arriving by a link get the page; Siphon's page fetch retries a 404 with the site's home page as referer, and only a 404 with and without a referer counts as a removed video. This replaced a Python plugin, archived in sites/plugins-archive."
     },
     {
       "id": "3movs-com",
@@ -667,6 +667,23 @@
       "lastTested": "2026-11-06",
       "testResult": "Not downloadable: yt-dlp refuses the site (\"[Piracy] This website is no longer supported since it has been determined to be primarily used for piracy\"), and the page answers HTTP 403 with a Cloudflare challenge.",
       "notes": "yt-dlp lists sxyprn.com among its KnownPiracy sites and has dropped support. Siphon only supports legitimate sites and doesn't work around that decision or the bot check, so no options, recipe or plugin are attempted."
+    },
+    {
+      "id": "mat6tube-com",
+      "name": "mat6tube",
+      "match": [
+        "mat6tube.com"
+      ],
+      "method": "recipe",
+      "status": "working",
+      "plugin": null,
+      "recipe": {
+        "base": "pageSources"
+      },
+      "exampleUrl": "https://mat6tube.com/watch/-190749775_456243780",
+      "lastTested": "2026-11-07",
+      "testResult": "20-second samples downloaded and every frame decoded cleanly: H.264 1280x720 with AAC audio (the \"720\" source, the tallest the page lists). With no entry, the learner's order reaches pageSources after the earlier fixes hit the dead /videofile/ address.",
+      "notes": "The page links /videofile/<id>.mp4, which yt-dlp's generic extractor and the playerConfig recipe both pick, but it answers 404. The real files are in the page's JW Player source list (window.playlist sources with file/label 240-720, on cdn.pvvstream.pro), which the built-in pageSources recipe reads. Siphon only treats a 404 as a removed video when the video's own page is gone, so the dead link no longer stops the learner."
     }
   ]
 }

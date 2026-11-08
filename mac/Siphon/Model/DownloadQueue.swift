@@ -475,12 +475,24 @@ final class DownloadQueue {
     }
 
     /// While a site is being learned, moves on to the next fix; otherwise marks the item failed.
-    private func attemptFailed(_ id: UUID, reason: String) {
+    private func attemptFailed(_ id: UUID, reason: String, kind known: SiteLearner.FailureKind? = nil) {
         guard let i = index(of: id) else { return }
         if var state = learning[id] {
-            let savedRecipeWorked = state.index == 0 && state.existing?.recipe != nil
-                && state.existing?.status == "working"
-            let kind = SiteLearner.classify(reason, savedRecipeWorked: savedRecipeWorked)
+            let kind = known ?? SiteLearner.classify(reason)
+            if kind == .missing, let page = URL(string: items[i].url) {
+                items[i].note = "Checking whether the video's page is still there…"
+                Task { [weak self] in
+                    let gone = await SiteLearner.pageIsGone(page)
+                    guard let self, let j = self.index(of: id), self.items[j].status == .downloading,
+                          self.learning[id] != nil else { return }
+                    self.appendLog(id, gone
+                        ? "--- The video's page is gone too, so the video has been removed"
+                        : "--- The video's page still loads, so this recipe doesn't fit the site")
+                    self.attemptFailed(id, reason: reason, kind: gone ? .itemSpecific : .site)
+                    self.scheduleDownloads()
+                }
+                return
+            }
             if state.firstFailure == nil { state.firstFailure = reason }
             if kind == .site, state.index + 1 < state.attempts.count {
                 state.index += 1
@@ -502,8 +514,8 @@ final class DownloadQueue {
                 case .piracy: "Recorded in Sites as unsupported (yt-dlp: piracy site)"
                 default: "Recorded in Sites as broken"
                 }
-            } else if kind == .itemSpecific, savedRecipeWorked {
-                items[i].note = "This video seems to be gone; the site's saved recipe is kept"
+            } else if kind == .itemSpecific, known == .itemSpecific {
+                items[i].note = "The video has been removed from the site"
             } else {
                 items[i].note = nil
             }
