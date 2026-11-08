@@ -73,6 +73,27 @@ struct DownloadHistoryTests {
         #expect(names(DownloadQueue.movingBelowCompleted(finished.id, in: first)) == ["finished", "running", "pending"])
     }
 
+    @Test func reorderingWithFailedAndPausedHiddenKeepsThemInPlace() {
+        func item(_ name: String, _ status: DownloadStatus) -> QueueItem {
+            QueueItem(url: "https://example.com/\(name)", destination: "/tmp", status: status)
+        }
+        let all = [item("a", .downloading), item("failed", .failed), item("b", .pending),
+                   item("paused", .paused), item("c", .pending)]
+        let visible = all.filter { !DownloadQueue.isInactive($0) }
+        #expect(visible.map { String($0.url.split(separator: "/").last!) } == ["a", "b", "c"])
+
+        func moved(_ source: Int, to destination: Int) -> [String] {
+            let (from, to) = DownloadQueue.fullOffsets(IndexSet(integer: source), destination,
+                                                       visible: visible.map(\.id), all: all.map(\.id))
+            var list = all
+            list.move(fromOffsets: from, toOffset: to)
+            return list.map { String($0.url.split(separator: "/").last!) }
+        }
+        #expect(moved(2, to: 0) == ["c", "a", "failed", "b", "paused"])
+        #expect(moved(0, to: 3) == ["failed", "b", "paused", "c", "a"])
+        #expect(moved(0, to: 2) == ["failed", "b", "paused", "a", "c"])
+    }
+
     @Test func queueHoldsALinkDownloadedBefore() throws {
         let folder = scratch()
         defer { try? FileManager.default.removeItem(at: folder) }

@@ -7,6 +7,7 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage(SettingsKey.destination) private var destinationPath = ""
     @AppStorage(SettingsKey.maxConcurrent) private var maxConcurrent = AppSettings.defaultMaxConcurrent
+    @AppStorage(SettingsKey.hideInactive) private var hideInactive = false
     @State private var linkText = ""
     @State private var prefix = ""
     @State private var addHint: String?
@@ -128,7 +129,8 @@ struct ContentView: View {
                             .font(.system(size: 15, weight: .semibold))
                         CountPill(text: "\(queue.items.count)")
                     }
-                    Text("\(queue.activeCount) of \(maxConcurrent) downloading")
+                    Text("\(queue.activeCount) of \(maxConcurrent) downloading"
+                         + (hideInactive && hiddenCount > 0 ? " · \(hiddenCount) hidden" : ""))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -150,27 +152,57 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .card()
                 .padding(.bottom, 20)
+            } else if visibleItems.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.tertiary)
+                    Text("Every item is failed or paused")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .card()
+                .padding(.bottom, 20)
             } else {
+                let visible = visibleItems
                 List {
-                    ForEach(queue.items) { item in
+                    ForEach(visible) { item in
                         QueueRow(item: item, queue: queue)
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     }
-                    .onMove { queue.move(fromOffsets: $0, toOffset: $1) }
+                    .onMove { queue.move(fromOffsets: $0, toOffset: $1, within: visible) }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .contentMargins(.bottom, 16, for: .scrollContent)
-                .animation(.snappy, value: queue.items.map(\.id))
+                .animation(.snappy, value: visible.map(\.id))
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    private var visibleItems: [QueueItem] {
+        hideInactive ? queue.items.filter { !DownloadQueue.isInactive($0) } : queue.items
+    }
+
+    private var hiddenCount: Int {
+        queue.items.filter(DownloadQueue.isInactive).count
+    }
+
     private var queueActions: some View {
         HStack(spacing: 6) {
+            Toggle(isOn: $hideInactive) {
+                Text("Hide Failed & Paused")
+                    .font(.system(size: 12))
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .help("Leave failed and paused downloads out of the list")
+            .padding(.trailing, 6)
+
             Button {
                 queue.pauseAll()
             } label: {

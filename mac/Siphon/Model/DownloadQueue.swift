@@ -187,6 +187,26 @@ final class DownloadQueue {
         save()
     }
 
+    /// Moves within a filtered view of the queue: `source` and `destination` are positions in
+    /// `visible`, translated to the full list so hidden items keep their places.
+    func move(fromOffsets source: IndexSet, toOffset destination: Int, within visible: [QueueItem]) {
+        let (from, to) = Self.fullOffsets(source, destination, visible: visible.map(\.id), all: items.map(\.id))
+        move(fromOffsets: from, toOffset: to)
+    }
+
+    static func fullOffsets(_ source: IndexSet, _ destination: Int, visible: [UUID], all: [UUID]) -> (IndexSet, Int) {
+        let from = IndexSet(source.compactMap { visible.indices.contains($0) ? all.firstIndex(of: visible[$0]) : nil })
+        let to = destination < visible.count
+            ? all.firstIndex(of: visible[destination]) ?? all.count
+            : visible.last.flatMap { all.firstIndex(of: $0) }.map { $0 + 1 } ?? all.count
+        return (from, to)
+    }
+
+    /// Failed and paused items, which "Hide Failed & Paused" leaves out of the list.
+    static func isInactive(_ item: QueueItem) -> Bool {
+        item.status == .failed || item.status == .paused
+    }
+
     /// Puts a just-finished item right below the last completed one, so finished downloads
     /// collect at the top in the order they finished and unfinished ones stay below them.
     func moveBelowCompleted(_ id: UUID) {

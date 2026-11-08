@@ -3,6 +3,7 @@ import Foundation
 enum SettingsKey {
     static let destination = "destinationPath"
     static let maxConcurrent = "maxConcurrentDownloads"
+    static let hideInactive = "hideInactiveQueueItems"
     static let quality = "qualityPreset"
     static let learnSites = "learnSites"
     static let autoCheckYtDlp = "autoCheckYtDlp"
