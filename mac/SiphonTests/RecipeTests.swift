@@ -242,6 +242,12 @@ struct RecipeTests {
         #expect(QualityPreset.audioOnly.formatArguments == ["-f", "ba/b", "-x"])
     }
 
+    @Test func plainFilesBeatStreamsAtEqualHeight() {
+        #expect(QualityPreset.configFile.sortArguments == ["-S", "res,proto", "--check-formats"])
+        #expect(QualityPreset.p720.sortArguments == ["-S", "res,proto", "--check-formats"])
+        #expect(QualityPreset.audioOnly.sortArguments.isEmpty)
+    }
+
     @Test func decodesSiteEntryAndMapsFollowEmbed() throws {
         let json = #"""
         {"sites":[

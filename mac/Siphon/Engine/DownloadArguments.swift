@@ -31,6 +31,13 @@ enum QualityPreset: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// At equal height a plain file beats a stream (HLS/DASH): one file instead of fragments, and
+    /// usually as good or better. Some sites list plain files that are gone (YouPorn's answer
+    /// 410), so the pick is checked first and yt-dlp falls back to the next format.
+    var sortArguments: [String] {
+        self == .audioOnly ? [] : ["-S", "res,proto", "--check-formats"]
+    }
+
     /// When a page's formats carry no height, yt-dlp ranks them by list order, so a player that
     /// lists "HQ" before "LQ" downloads the low one. `[height<?1]` keeps only formats of unknown
     /// height, so sites that report heights are unaffected.
@@ -78,6 +85,7 @@ enum DownloadArguments {
         args += numberedTitleFix
         args += siteArguments
         args += quality.formatArguments
+        args += quality.sortArguments
         args += [
             "--no-update",
             "--progress", "--newline", "--no-simulate",
